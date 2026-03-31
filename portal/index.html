@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insurance Ops Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <style>
+      .app-shell {
+        display: grid !important;
+        grid-template-columns: 1fr !important;
+        grid-template-rows: 60px minmax(0, 1fr) !important;
+        gap: 0 !important;
+        padding: 0 !important;
+        max-width: none !important;
+        min-height: 100vh !important;
+      }
+
+      .top-nav {
+        height: 60px !important;
+        width: 100% !important;
+        position: sticky !important;
+        top: 0 !important;
+        z-index: 100 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: space-between !important;
+        gap: 10px !important;
+        padding: 6px 10px !important;
+        overflow: visible !important;
+      }
+
+      .top-nav-left {
+        display: flex !important;
+        align-items: center !important;
+        gap: 10px !important;
+        min-width: 0 !important;
+        flex: 1 1 auto !important;
+      }
+
+      .top-nav .tab-strip {
+        display: flex !important;
+        flex: 1 1 auto !important;
+        min-width: 0 !important;
+        max-width: 100% !important;
+        width: auto !important;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        white-space: nowrap !important;
+        margin: 0 !important;
+        padding: 3px !important;
+        position: static !important;
+      }
+
+      .top-nav .tab-button {
+        flex: 0 0 auto !important;
+        white-space: nowrap !important;
+      }
+
+      .top-nav-right {
+        display: flex !important;
+        align-items: center !important;
+        gap: 8px !important;
+        flex: 0 0 auto !important;
+      }
+
+      .main-panel {
+        height: calc(100vh - 60px) !important;
+        overflow: hidden !important;
+        padding: 10px !important;
+      }
+
+      #callDeskTabPanel {
+        height: 100% !important;
+        overflow: hidden !important;
+      }
+
+      .calldesk-stage {
+        display: grid !important;
+        grid-template-columns: 24% 50% 24% !important;
+        gap: 1% !important;
+        align-items: start !important;
+        height: 100% !important;
+        min-height: 0 !important;
+        padding: 0 !important;
+      }
+
+      .calldesk-column {
+        min-height: 0 !important;
+        height: 100% !important;
+        overflow-y: auto !important;
+        overflow-x: hidden !important;
+        display: grid !important;
+        gap: 10px !important;
+        align-content: start !important;
+      }
+
+      .calldesk-center {
+        position: relative !important;
+        padding-left: 10px !important;
+        padding-right: 10px !important;
+      }
+
+      .calldesk-right {
+        border-left: 1px solid rgba(117, 155, 194, 0.16) !important;
+        padding-left: 8px !important;
+      }
+
+      .discovery-split {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        gap: 20px !important;
+        align-items: start !important;
+        width: 100% !important;
+      }
+
+      .discovery-column {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 12px !important;
+        width: 100% !important;
+        min-width: 0 !important;
+      }
+
+      .discovery-field {
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 4px !important;
+        width: 100% !important;
+        overflow: hidden !important;
+        min-width: 0 !important;
+      }
+
+      #callDeskTabPanel .calldesk-form input,
+      #callDeskTabPanel .calldesk-form select,
+      #callDeskTabPanel .calldesk-form textarea,
+      #callDeskTabPanel .workflow-form input,
+      #callDeskTabPanel .workflow-form select,
+      #callDeskTabPanel .workflow-form textarea {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      #callDeskTabPanel .calldesk-workflow .discovery-field input,
+      #callDeskTabPanel .calldesk-workflow .discovery-field select {
+        width: 100% !important;
+        max-width: 100% !important;
+        position: static !important;
+        transform: none !important;
+      }
+
+      .save-sync-btn {
+        width: 100% !important;
+        background: #2563eb !important;
+        border: 1px solid #2563eb !important;
+        color: #ffffff !important;
+        font-weight: 700 !important;
+        padding: 12px !important;
+        margin-top: 16px !important;
+        border-radius: 8px !important;
+      }
+
+      .save-sync-btn:hover {
+        background: #3b82f6 !important;
+        border-color: #3b82f6 !important;
+      }
+
+      @media (max-width: 1500px) {
+        .top-nav-right #datasetStatus,
+        .top-nav-right .top-nav-role {
+          display: none !important;
+        }
+      }
+
+      @media (max-width: 1300px) {
+        .top-nav-right {
+          display: none !important;
+        }
+      }
+
+      @media (max-width: 1100px) {
+        .calldesk-stage {
+          grid-template-columns: 1fr !important;
+        }
+
+        .discovery-split {
+          grid-template-columns: 1fr !important;
+          gap: 14px !important;
+        }
+
+        .main-panel,
+        #callDeskTabPanel {
+          overflow: auto !important;
+        }
+      }
+
+      body.dense #callDeskTabPanel .calldesk-workflow .discovery-column {
+        gap: 10px !important;
+      }
+
+      body.dense #callDeskTabPanel .calldesk-workflow .discovery-field {
+        gap: 3px !important;
+      }
+
+      body.dense #callDeskTabPanel .calldesk-workflow input,
+      body.dense #callDeskTabPanel .calldesk-workflow select,
+      body.dense #callDeskTabPanel .calldesk-workflow textarea {
+        padding: 4px 8px !important;
+        font-size: 0.84rem !important;
+        line-height: 1.2 !important;
+        transform: none !important;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="top-nav">
+        <div class="top-nav-left">
+          <strong class="top-brand">OPENCLAW OPS</strong>
+          <div class="tab-strip" role="tablist" aria-label="Dashboard views">
+            <button id="dashboardTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="dashboardTabPanel" data-tab="dashboard">1. Ops Dashboard</button>
+            <button id="leadSelectionTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="leadSelectionTabPanel" data-tab="leadselection">2. Lead Selection</button>
+            <button id="callDeskTabButton" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="callDeskTabPanel" data-tab="calldesk">3. Call Desk</button>
+            <button id="campaignTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="campaignTabPanel" data-tab="campaign">4. Campaign</button>
+            <button id="calendarTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="calendarTabPanel" data-tab="calendar">5. Calendar</button>
+            <button id="pipelineTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="pipelineTabPanel" data-tab="pipeline">6. Pipeline</button>
+          </div>
+        </div>
+        <div class="top-nav-right">
+          <div id="topStatusPills" class="top-status-pills" title="Readiness status">
+            <span id="topDncCount" class="status-pill compact">DNC: --</span>
+            <span id="topQueueCount" class="status-pill compact">Queue: --</span>
+          </div>
+          <label class="top-nav-role">
+            <select id="roleViewSelect">
+              <option value="agent">Agent</option>
+              <option value="manager">Manager</option>
+              <option value="sourcing">Sourcing</option>
+            </select>
+          </label>
+          <label class="file-button slim">Load CSV<input id="leadFileInput" type="file" accept=".csv" /></label>
+          <button id="carrierSettingsBtn" class="ghost-button slim" type="button" aria-label="Carrier settings">⚙</button>
+          <button id="exportSummaryBtn" class="ghost-button slim" type="button">Export</button>
+          <span id="datasetStatus" class="status-pill compact" aria-live="polite">Loading...</span>
+        </div>
+      </header>
+
+      <main class="main-panel">
+        <p class="table-summary dense-hide">Flow: triage -> select lead -> cleanup (phone/email format) -> call desk -> campaign -> pipeline.</p>
+
+        <div id="dashboardTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="dashboardTabButton" hidden>
+          <header class="hero">
+            <div>
+              <p class="eyebrow">Lead Command Center</p>
+              <h2>Prioritize high-value work first</h2>
+            </div>
+            <div class="hero-badge"><span class="hero-badge-label">Primary queue</span><strong id="primaryQueueLabel">...</strong></div>
+          </header>
+
+          <section class="operator-strip">
+            <button class="operator-chip" type="button" data-preset="call_queue">Call Queue</button>
+            <button class="operator-chip" type="button" data-preset="needs_review">Needs Review</button>
+            <button class="operator-chip" type="button" data-preset="email_salvage">Email Salvage</button>
+            <button class="operator-chip" type="button" data-preset="sourced_ready">Sourced Ready</button>
+            <button class="operator-chip" type="button" data-preset="sourced_enrichment">Enrichment Needed</button>
+            <button class="operator-chip clear" type="button" data-preset="clear">Clear</button>
+          </section>
+
+          <section class="panel upload-panel">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Lead Upload</p><h3>Import source files</h3></div>
+              <p id="dashboardUploadStatus" class="table-summary" aria-live="polite">No file loaded.</p>
+            </div>
+            <label class="file-button">Upload CSV<input id="leadFileInputDashboard" type="file" accept=".csv" /></label>
+            <div class="detail-actions">
+              <button id="importUploadedToDbBtn" class="ghost-button slim" type="button" disabled>Finalize Import</button>
+              <button id="importUploadedToDbCleanBtn" class="ghost-button slim" type="button" disabled>Import + Cleanup</button>
+            </div>
+            <div class="upload-preview-wrap">
+              <div id="uploadPreviewSummary" class="table-summary">No preview rows loaded.</div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>#</th>
+                      <th>Name</th>
+                      <th>Phone (10-digit)</th>
+                      <th>State</th>
+                      <th>Validation</th>
+                    </tr>
+                  </thead>
+                  <tbody id="uploadPreviewTable">
+                    <tr><td colspan="5" class="muted">Upload a CSV to preview validation.</td></tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </section>
+
+          <section class="metrics-grid" id="metricsGrid"></section>
+          <section class="chart-grid">
+            <article class="panel chart-card">
+              <div class="panel-header compact"><div><p class="panel-label">Performance Overview</p><h3>Disposition funnel</h3></div></div>
+              <canvas id="pipelineChart" height="210"></canvas>
+            </article>
+            <article class="panel chart-card">
+              <div class="panel-header compact"><div><p class="panel-label">Performance Overview</p><h3>Carrier mix</h3></div></div>
+              <canvas id="carrierMixChart" height="210"></canvas>
+            </article>
+            <article class="panel chart-card">
+              <div class="panel-header compact"><div><p class="panel-label">Performance Overview</p><h3>Queue health</h3></div></div>
+              <canvas id="queueHealthChart" height="210"></canvas>
+            </article>
+            <article class="panel chart-card appointments-widget">
+              <div class="panel-header compact">
+                <div><p class="panel-label">Calendar</p><h3>Today's agenda</h3></div>
+                <div class="table-summary">Openclaw GOG</div>
+              </div>
+              <iframe
+                id="dashboardAgendaFrame"
+                title="Today agenda"
+                src=""
+                width="100%"
+                height="260"
+                frameborder="0"
+                scrolling="no"
+              ></iframe>
+            </article>
+          </section>
+          <section class="triage-grid" id="triageGrid"></section>
+
+          <section class="panel" data-role-section="sourcing manager">
+            <div class="panel-header compact"><div><p class="panel-label">Daily Sourcing</p><h3>Morning and evening motion</h3></div></div>
+            <div class="sourcing-grid">
+              <div><h4>Morning</h4><ul id="morningChecklist" class="check-list compact-list"></ul></div>
+              <div><h4>Evening</h4><ul id="eveningChecklist" class="check-list compact-list"></ul></div>
+              <div><h4>Source Mix</h4><div id="sourceBars" class="bar-list"></div></div>
+              <div><h4>Touch Mix</h4><div id="touchBars" class="bar-list"></div></div>
+            </div>
+          </section>
+
+          <section class="panel" data-role-section="sourcing manager">
+            <div class="panel-header compact"><div><p class="panel-label">Sourcing Criteria</p><h3>Acceptance rules</h3></div><div id="criteriaSummary" class="table-summary"></div></div>
+            <div class="criteria-grid">
+              <article class="criteria-card">
+                <h4>Baseline</h4>
+                <label><span>Geography</span><select id="criteriaGeography"><option value="us_only">US only</option><option value="global">Global</option></select></label>
+                <label><span>Quality</span><select id="criteriaQuality"><option value="strong">Strong</option><option value="balanced">Balanced</option></select></label>
+              </article>
+              <article class="criteria-card">
+                <h4>Triggers</h4>
+                <div class="toggle-list">
+                  <label><input id="triggerNewParent" type="checkbox" checked /> New parent</label>
+                  <label><input id="triggerHomeBuyer" type="checkbox" checked /> Home buyer</label>
+                  <label><input id="triggerJobLoss" type="checkbox" checked /> Job loss</label>
+                  <label><input id="triggerJobChange" type="checkbox" checked /> Job change</label>
+                  <label><input id="triggerMedicare" type="checkbox" /> Medicare</label>
+                  <label><input id="triggerBusinessOwner" type="checkbox" /> Business owner</label>
+                </div>
+              </article>
+              <article class="criteria-card">
+                <h4>Rules</h4>
+                <div class="toggle-list">
+                  <label><input id="ruleRequireUs" type="checkbox" checked /> Require US signal</label>
+                  <label><input id="ruleRequireName" type="checkbox" checked /> Require name</label>
+                  <label><input id="ruleRequireTrigger" type="checkbox" checked /> Require trigger</label>
+                  <label><input id="ruleRequirePath" type="checkbox" checked /> Require contact path</label>
+                  <label><input id="ruleRejectAnonymous" type="checkbox" checked /> Reject anonymous</label>
+                </div>
+              </article>
+            </div>
+          </section>
+
+          <section class="panel" data-role-section="sourcing manager">
+            <div class="guidance-grid">
+              <article class="guide-card"><h4>Strong Leads</h4><ul id="strongLeadList" class="check-list compact-list"></ul></article>
+              <article class="guide-card"><h4>Weak Leads</h4><ul id="weakLeadList" class="check-list compact-list"></ul></article>
+              <article class="guide-card"><h4>Best Source Moves</h4><ul id="sourceMoveList" class="check-list compact-list"></ul></article>
+            </div>
+          </section>
+
+          <section class="panel" data-role-section="sourcing manager">
+            <div class="enrichment-grid">
+              <article class="queue-card needs-enrichment"><p class="panel-label">Enrichment Needed</p><h3 id="enrichmentNeededCount">0</h3><p id="enrichmentNeededNote" class="muted"></p></article>
+              <article class="queue-card ready-review"><p class="panel-label">Ready for Review</p><h3 id="readyReviewCount">0</h3><p id="readyReviewNote" class="muted"></p></article>
+              <article class="queue-card"><p class="panel-label">Missing Fields</p><div id="missingFieldBars" class="bar-list"></div></article>
+              <article class="queue-card rejected-review"><p class="panel-label">Rejected</p><h3 id="rejectedCriteriaCount">0</h3><p id="rejectedCriteriaNote" class="muted"></p></article>
+            </div>
+          </section>
+
+          <section class="panel" data-role-section="sourcing manager">
+            <div class="panel-header compact"><div><p class="panel-label">Sourced Leads</p><h3>Candidate pipeline</h3></div><div id="sourcedTableSummary" class="table-summary"></div></div>
+            <div class="filters sourced-filters">
+              <label><span>Search</span><input id="sourcedSearchInput" type="search" /></label>
+              <label><span>Queue</span><select id="sourcedQueueFilter"><option value="all">All</option><option value="Enrichment Needed">Enrichment Needed</option><option value="Ready For Review">Ready For Review</option></select></label>
+              <label><span>Platform</span><select id="sourcedPlatformFilter"><option value="all">All</option></select></label>
+              <label><span>Stage</span><select id="sourcedStageFilter"><option value="all">All</option><option value="new">New</option><option value="enriching">Enriching</option><option value="review">Review</option><option value="approved">Approved</option><option value="hold">Hold</option></select></label>
+            </div>
+            <div class="workbench-toolbar"><div id="sourcedPresetLabel" class="toolbar-note">Preset: none</div><div class="toolbar-actions"><button id="copySourcedSummaryBtn" class="ghost-button slim" type="button">Copy sourced summary</button></div></div>
+            <div class="pipeline-layout">
+              <div class="table-wrap pipeline-table-wrap"><table><thead><tr><th>Lead</th><th>Pipeline</th><th>Trigger</th><th>Touch</th><th>Contact</th><th>Circumstances</th></tr></thead><tbody id="sourcedLeadTable"></tbody></table></div>
+              <aside class="detail-panel" id="sourcedDetailPanel">
+                <p class="panel-label">Workspace</p>
+                <h3 id="detailLeadName">Select a sourced lead</h3>
+                <p id="detailLeadMeta" class="muted">Pick a row for details.</p>
+                <label><span>Stage</span><select id="detailStageSelect"><option value="new">New</option><option value="enriching">Enriching</option><option value="review">Review</option><option value="approved">Approved</option><option value="hold">Hold</option></select></label>
+                <div class="detail-grid">
+                  <div><p class="detail-label">Circumstances</p><p id="detailCircumstances" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Evidence</p><p id="detailEvidence" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Trigger</p><p id="detailTrigger" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Touch</p><p id="detailTouch" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Path</p><p id="detailPath" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Confidence</p><p id="detailConfidence" class="detail-copy">-</p></div>
+                </div>
+                <label><span>Operator note</span><textarea id="detailOwnerNote" rows="4"></textarea></label>
+                <div class="detail-actions">
+                  <button id="saveLeadStateBtn" class="ghost-button slim" type="button">Save state</button>
+                  <button id="copyLeadBriefBtn" class="ghost-button slim" type="button">Copy brief</button>
+                  <a id="openLeadUrlBtn" class="ghost-button slim link-button" href="#" target="_blank" rel="noreferrer">Open source</a>
+                </div>
+              </aside>
+            </div>
+          </section>
+
+          <section class="panel-grid" data-role-section="manager">
+            <article class="panel"><div class="panel-header"><div><p class="panel-label">Queue Mix</p><h3>Where leads go next</h3></div></div><div id="queueBars" class="bar-list"></div></article>
+            <article class="panel"><div class="panel-header"><div><p class="panel-label">Channel Plan</p><h3>Recommended channel</h3></div></div><div id="channelBars" class="bar-list"></div></article>
+          </section>
+
+          <section class="panel-grid" data-role-section="manager">
+            <article class="panel wide"><div class="panel-header"><div><p class="panel-label">Compliance</p><h3>Consent and DNC risk</h3></div></div><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Count</th><th>Notes</th></tr></thead><tbody id="complianceTable"></tbody></table></div></article>
+            <article class="panel"><div class="panel-header"><div><p class="panel-label">Sequence Mix</p><h3>Automation path mix</h3></div></div><div id="sequenceBars" class="bar-list"></div></article>
+          </section>
+
+          <section class="panel-grid" data-role-section="manager">
+            <article class="panel"><div class="panel-header"><div><p class="panel-label">ROI Snapshot</p><h3>Business metrics</h3></div></div><div id="roiStats" class="stat-stack"></div></article>
+          </section>
+
+          <section class="panel-grid" data-role-section="manager">
+            <article class="panel"><div class="panel-header"><div><p class="panel-label">Outcome Analytics</p><h3>Need -> lane -> disposition</h3></div></div><div id="outcomeFunnelBars" class="bar-list"></div></article>
+            <article class="panel"><div class="panel-header"><div><p class="panel-label">Data Guardrails</p><h3>Blocked before call queue</h3></div></div><div id="dataQualityList" class="bar-list"></div></article>
+          </section>
+
+          <section class="panel ops-footer-tools">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Maintenance</p><h3>UAT cleanup tools</h3></div>
+              <span id="purgeStatus" class="table-summary" aria-live="polite">Ready</span>
+            </div>
+            <div class="detail-actions">
+              <button id="clearTestDataBtn" class="danger-button" type="button">Clear Test Data</button>
+            </div>
+          </section>
+        </div>
+
+        <div id="leadSelectionTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="leadSelectionTabButton" hidden>
+          <header class="hero"><div><p class="eyebrow">Lead Selection</p><h2>Select one lead and load into Call Desk</h2></div></header>
+          <section class="panel">
+            <div class="panel-header compact"><div><p class="panel-label">Finder</p><h3>One-line rows</h3></div><div class="lead-select-header-actions"><div id="leadSelectSummary" class="table-summary"></div><button id="leadSelectLoadBtn" class="ghost-button slim" type="button" disabled>Load into Call Desk</button><span id="leadSelectStatus" class="table-summary" aria-live="polite">No lead selected.</span></div></div>
+            <div class="lead-select-filters">
+              <label><span>Search</span><input id="leadSelectSearch" type="text" /></label>
+              <label><span>Queue</span><select id="leadSelectQueue"><option value="all">All</option></select></label>
+              <label><span>Priority</span><select id="leadSelectPriority"><option value="all">All</option><option value="high">High</option><option value="normal">Normal</option></select></label>
+              <label><span>Eligibility</span><select id="leadSelectEligibility"><option value="all">All</option></select></label>
+            </div>
+            <div class="table-wrap lead-select-table-wrap"><table><thead><tr><th>Pick</th><th class="sortable" data-sort="name">Name</th><th class="sortable" data-sort="contact">Contact</th><th class="sortable" data-sort="queue">Queue</th><th class="sortable" data-sort="priority">Priority</th><th class="sortable" data-sort="last_activity">Last Activity</th><th class="sortable" data-sort="next_step">Next Step</th><th>Quick Action</th></tr></thead><tbody id="leadSelectTable"></tbody></table></div>
+          </section>
+        </div>
+
+        <div id="callDeskTabPanel" class="tab-panel active" role="tabpanel" aria-labelledby="callDeskTabButton">
+          <section class="calldesk-stage">
+            <div class="calldesk-column calldesk-left">
+              <article class="panel calldesk-panel">
+                <div class="panel-header compact"><div><p class="panel-label">Step 1</p><h3>Client snapshot</h3></div></div>
+                <div class="detail-actions"><button id="deskCreateLeadBtn" class="ghost-button slim" type="button">Start new lead</button><span id="deskLeadPickerStatus" class="table-summary" aria-live="polite">Load a lead from Lead Selection.</span></div>
+                <div class="calldesk-form calldesk-form-compact">
+                  <label><span>Client name</span><input id="deskClientName" type="text" /></label>
+                  <label><span>Phone</span><input id="deskPhone" type="tel" inputmode="tel" /></label>
+                  <label><span>Coverage target</span><input id="deskCoverage" type="text" /></label>
+                  <label><span>Budget</span><input id="deskBudgetText" type="text" /></label>
+                  <label><span>Trigger</span><input id="deskTrigger" type="text" /></label>
+                </div>
+              </article>
+
+              <article class="panel calldesk-panel">
+                <div class="panel-header compact"><div><p class="panel-label">Step 3</p><h3>Call wrap-up and disposition</h3></div><div class="detail-actions"><button id="deskScriptDrawerToggleBtn" class="ghost-button slim" type="button">Scripts</button><div id="callDeskStatus" class="table-summary" aria-live="polite">Ready</div></div></div>
+                <div class="calldesk-form calldesk-form-compact">
+                  <label><span>Need/goal summary</span><input id="deskGoalNote" type="text" /></label>
+                  <label><span>Health notes</span><input id="deskHealthNotes" type="text" /></label>
+                  <label><span>Objection</span><input id="deskObjection" type="text" /></label>
+                  <label><span>Disposition</span><select id="deskDisposition"><option value="">Select</option><option value="quoted">Quoted</option><option value="follow_up">Follow-up</option><option value="callback">Callback</option><option value="no_answer">No Answer</option><option value="not_interested">Not interested</option><option value="not_qualified">Not qualified</option><option value="sold">Sold</option></select><span class="field-helper">Warning: 'Not Qualified' will permanently remove lead from active queues.</span></label>
+                  <label><span>Next step</span><input id="deskNextStep" type="text" /></label>
+                  <label><span>Follow-up date/time</span><input id="deskFollowUp" type="datetime-local" /></label>
+                  <label class="sync-toggle"><span>Sync via Openclaw GOG</span><input id="deskSyncGog" type="checkbox" checked /></label>
+                </div>
+                <div class="notes-toolbar">
+                  <button class="ghost-button slim" type="button" data-desk-chip="Asked for callback">Callback</button>
+                  <button class="ghost-button slim" type="button" data-desk-chip="Needs spouse approval">Spouse</button>
+                  <button class="ghost-button slim" type="button" data-desk-chip="Quoted on call">Quoted</button>
+                  <button class="ghost-button slim" type="button" data-desk-chip="Budget objection">Budget</button>
+                  <button class="ghost-button slim" type="button" data-desk-chip="Health concern">Health</button>
+                </div>
+                <div id="deskObjectionHighlight" class="script-highlight" hidden></div>
+                <button id="deskSaveToNotesBtn" class="save-sync-btn" type="button">Save to notes history</button>
+                <textarea id="deskCallNotes" rows="8"></textarea>
+                <div class="detail-actions"><button id="deskCopySummaryBtn" class="ghost-button slim" type="button">Copy summary</button><button id="deskClearBtn" class="ghost-button slim" type="button">Clear</button></div>
+                <div class="calldesk-divider"></div>
+                <div class="panel-header compact"><div><p class="panel-label">Recent</p><h3>Recent call notes</h3></div><strong id="notesStatus" aria-live="polite">Saved</strong></div>
+                <div id="notesHistoryList" class="notes-history"></div>
+              </article>
+            </div>
+
+            <div class="calldesk-column calldesk-center">
+              <div id="deskScriptToast" class="desk-toast" hidden></div>
+              <article class="panel calldesk-panel">
+                <div class="panel-header compact"><div><p class="panel-label">Step 2</p><h3>Discovery</h3></div></div>
+                <p class="muted small dense-hide">Order: clarify problem -> confirm coverage -> branch -> recommend.</p>
+                <ul class="check-list compact-list dense-hide"><li>2A. Clarify the real problem today</li><li>2B. Confirm existing policy and replacement intent</li><li>2C. Complete health/life qualification before quote</li></ul>
+                <div class="workflow-form calldesk-workflow">
+                  <div class="discovery-split">
+                    <div class="discovery-group discovery-column">
+                      <h4 class="discovery-group-title">Qualification</h4>
+                      <div class="discovery-field"><label data-field-id="deskAge"><span>Age</span><select id="deskAge"><option value="">Select</option><option value="under50">Under 50</option><option value="50to64">50-64</option><option value="65to75">65-75</option><option value="76plus">76+</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskTobacco"><span>Tobacco</span><select id="deskTobacco"><option value="">Select</option><option value="no">No</option><option value="yes">Yes</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskHealth"><span>Health posture</span><select id="deskHealth"><option value="">Select</option><option value="healthy">Healthy</option><option value="managed">Managed</option><option value="challenging">Challenging</option></select><span class="field-helper">Select 'Challenging' if 2+ major medications.</span></label></div>
+                      <div class="discovery-field"><label data-field-id="deskMedicareFlag"><span>Medicare flag</span><select id="deskMedicareFlag"><option value="">Select</option><option value="yes">Yes</option><option value="soon">Soon</option><option value="no">No</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskLifeFeasibility"><span>Life feasibility</span><select id="deskLifeFeasibility"><option value="">Select</option><option value="healthy">Healthy</option><option value="managed">Managed</option><option value="challenging">Challenging</option><option value="unknown">Unknown</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskHealthCoverageType"><span>Health coverage type</span><select id="deskHealthCoverageType"><option value="">Select</option><option value="under65">Under65</option><option value="medicare">Medicare</option><option value="smallgroup">Small group</option><option value="gap">Gap</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskHealthNeed"><span>Health need</span><select id="deskHealthNeed"><option value="">Select</option><option value="premium">Premium</option><option value="doctors">Doctors</option><option value="rx">RX</option><option value="deductible">Deductible</option><option value="lost_coverage">Lost coverage</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskHealthPriority"><span>Health priority</span><select id="deskHealthPriority"><option value="">Select</option><option value="today">Today</option><option value="soon">Soon</option><option value="review">Review</option></select></label></div>
+                    </div>
+                    <div class="discovery-group discovery-column">
+                      <h4 class="discovery-group-title">Intent &amp; Budget</h4>
+                      <div class="discovery-field"><label data-field-id="deskProductPath"><span>Product path</span><select id="deskProductPath"><option value="">Select</option><option value="health">Health</option><option value="life">Life</option><option value="both">Both</option><option value="unclear">Unclear</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskNeedArea"><span>Need area</span><select id="deskNeedArea"><option value="">Select</option><option value="health">Health</option><option value="life">Life</option><option value="both">Both</option><option value="unclear">Unclear</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskCurrentCoverage"><span>Current coverage</span><input id="deskCurrentCoverage" type="text" /></label></div>
+                      <div class="discovery-field"><label><span>Existing policy</span><select id="deskExistingPolicy"><option value="">Select</option><option value="yes">Yes</option><option value="no">No</option><option value="unknown">Unknown</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskPolicyIntent"><span>Policy intent</span><select id="deskPolicyIntent"><option value="">Select</option><option value="replace">Replace</option><option value="supplement">Supplement</option><option value="new">New</option><option value="unknown">Unknown</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskDecisionMaker"><span>Decision maker</span><input id="deskDecisionMaker" type="text" /></label></div>
+                      <div class="discovery-field"><label><span>Decision timeline</span><input id="deskDecisionTimeline" type="text" /></label></div>
+                      <div class="discovery-field"><label data-field-id="deskGoal"><span>Goal</span><select id="deskGoal"><option value="">Select</option><option value="income">Income</option><option value="burial">Burial</option><option value="permanent">Permanent</option><option value="retirement">Retirement</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskBudget"><span>Budget level</span><select id="deskBudget"><option value="">Select</option><option value="low">Low</option><option value="mid">Mid</option><option value="high">High</option></select></label></div>
+                      <div class="discovery-field"><label data-field-id="deskDuration"><span>Duration</span><select id="deskDuration"><option value="">Select</option><option value="temporary">Temporary</option><option value="lifelong">Lifelong</option></select></label></div>
+                      <div class="discovery-field"><label><span>Speed vs optimize</span><select id="deskSpeed"><option value="">Select</option><option value="speed">Speed</option><option value="balanced">Balanced</option><option value="optimize">Optimize</option></select></label></div>
+                    </div>
+                  </div>
+                </div>
+              </article>
+              <article id="deskCarrierActionCard" class="panel calldesk-panel" hidden>
+                <div class="panel-header compact"><div><p class="panel-label">Carrier Action</p><h3 id="deskCarrierActionName">Carrier Match</h3></div></div>
+                <div class="advisor-block">
+                  <p class="detail-label">Writing number <span class="oc-tooltip" tabindex="0"><span class="oc-tooltip-icon" aria-hidden="true">ⓘ</span><span class="oc-tooltip-bubble" role="tooltip">Enter your specific NPN or Carrier ID to ensure you receive commission.</span></span></p>
+                  <div class="detail-actions">
+                    <input id="deskCarrierWritingNumberInput" type="text" placeholder="Agent Writing Number" />
+                    <button id="deskCopyWritingBtn" class="ghost-button slim" type="button">Copy</button>
+                  </div>
+                </div>
+                <div class="advisor-block">
+                  <p class="detail-label">Support phone</p>
+                  <p id="deskCarrierSupportPhone" class="detail-copy">Not configured</p>
+                </div>
+                <div class="detail-actions">
+                  <button id="deskLaunchCarrierPortalBtn" class="save-sync-btn" type="button">Launch Carrier Portal</button>
+                </div>
+              </article>
+            </div>
+
+            <aside class="calldesk-column calldesk-right">
+              <article class="panel calldesk-panel calldesk-sticky calldesk-readiness-widget">
+                <div class="panel-header compact"><div><p class="panel-label">Quote Readiness</p><h3 id="deskReadinessHeading">Required before quote</h3></div></div>
+                <p id="deskReadinessStatus" class="table-summary">Complete required answers to unlock best-fit recommendations.</p>
+                <ul id="deskReadinessList" class="check-list compact-list"></ul>
+              </article>
+
+              <article class="panel calldesk-panel">
+                <div class="panel-header compact"><div><p class="panel-label">Recommendation</p><h3 id="deskRecommendationTitle">Quote order and lane</h3></div></div>
+                <div class="advisor-block"><p class="detail-label">Lane</p><p id="deskWorkflowLane" class="detail-copy">Answer discovery questions.</p></div>
+                <div class="advisor-block"><p class="detail-label">Primary</p><div id="deskWorkflowPrimary" class="option-chip-list"></div></div>
+                <div class="advisor-block"><p class="detail-label">Confidence</p><p id="deskWorkflowConfidence" class="detail-copy">Low confidence until qualification is complete.</p><p class="detail-label">Fallback carrier</p><div id="deskWorkflowFallback" class="option-chip-list"></div></div>
+                <div class="advisor-block"><p class="detail-label">Still available</p><div id="deskWorkflowAvailable" class="option-chip-list"></div></div>
+                <div class="advisor-block"><p class="detail-label">Why this lane</p><ul id="deskWorkflowReasons" class="check-list compact-list"></ul></div>
+              </article>
+
+            </aside>
+          </section>
+
+          <aside id="deskScriptDrawer" class="script-drawer" hidden>
+            <div class="script-drawer-card">
+              <div class="panel-header compact">
+                <div><p class="panel-label">Call Desk Drawer</p><h3>Scripts and objection helpers</h3></div>
+                <button id="deskScriptDrawerCloseBtn" class="ghost-button slim" type="button">Close</button>
+              </div>
+              <div class="objection-actions" role="group" aria-label="Objection helper quick actions">
+                <button class="ghost-button slim" type="button" data-objection-action="budget">Handle: Budget</button>
+                <button class="ghost-button slim" type="button" data-objection-action="spouse">Handle: Spouse</button>
+                <button class="ghost-button slim" type="button" data-objection-action="thinking">Handle: Thinking</button>
+              </div>
+              <div class="advisor-block"><p class="detail-label">Must-ask</p><ul id="deskScript2Questions" class="check-list compact-list"></ul></div>
+              <div id="deskDynamicScriptCue" class="script-highlight" hidden></div>
+              <div class="advisor-block"><p class="detail-label">Carrier checks</p><ul id="deskCarrierDecisionChecks" class="check-list compact-list"></ul></div>
+            </div>
+          </aside>
+
+          <div id="deskObjectionModal" class="calldesk-modal" role="dialog" aria-modal="true" aria-labelledby="deskObjectionTitle" hidden>
+            <div class="calldesk-modal-card">
+              <div class="panel-header compact"><div><p class="panel-label">Objection script</p><h3 id="deskObjectionTitle">Handle objection</h3></div><button id="deskObjectionCloseBtn" class="ghost-button slim" type="button">Close</button></div>
+              <p id="deskObjectionBody" class="detail-copy"></p>
+              <div class="detail-actions">
+                <button id="deskObjectionCopyBtn" class="ghost-button slim" type="button">Copy script</button>
+                <button id="deskObjectionInsertBtn" class="ghost-button slim" type="button">Insert into notes</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div id="campaignTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="campaignTabButton" hidden>
+          <header class="hero"><div><p class="eyebrow">Campaign Builder</p><h2>Select leads and prepare outbound batch drafts</h2></div></header>
+          <section class="panel">
+            <div class="panel-header compact"><div><p class="panel-label">Filters</p><h3>Targeting controls</h3></div><div id="campaignSummary" class="table-summary"></div></div>
+            <div class="lead-select-filters">
+              <label><span>Search</span><input id="campaignSearch" type="text" /></label>
+              <label><span>Queue</span><select id="campaignQueue"><option value="all">All</option></select></label>
+              <label><span>Priority</span><select id="campaignPriority"><option value="all">All</option><option value="high">High</option><option value="normal">Normal</option></select></label>
+              <label><span>Eligibility</span><select id="campaignEligibility"><option value="all">All</option></select></label>
+            </div>
+            <div class="lead-select-filters">
+              <label><span>Channel</span><select id="campaignChannel"><option value="all">All</option></select></label>
+              <label><span>Consent</span><select id="campaignConsent"><option value="all">All</option><option value="eligible">Eligible</option><option value="blocked">Blocked</option></select></label>
+              <label><span>Angle</span><input id="campaignAngle" type="text" /></label>
+              <label><span>CTA</span><input id="campaignCta" type="text" /></label>
+            </div>
+            <div class="lead-select-filters">
+              <label><span>Sender</span><input id="campaignSenderName" type="text" /></label>
+              <div class="lead-select-header-actions">
+                <button id="campaignSelectVisibleBtn" class="ghost-button slim" type="button">Select visible</button>
+                <button id="campaignClearSelectionBtn" class="ghost-button slim" type="button">Clear selected</button>
+                <button id="campaignCopySummaryBtn" class="ghost-button slim" type="button">Copy summary</button>
+                <button id="campaignExportJsonBtn" class="ghost-button slim" type="button">Export JSON</button>
+                <button id="campaignExportCsvBtn" class="ghost-button slim" type="button">Export CSV</button>
+              </div>
+            </div>
+            <div id="campaignStatus" class="table-summary" aria-live="polite">Ready</div>
+            <div id="campaignBatchStats" class="bar-list"></div>
+            <div class="table-wrap lead-select-table-wrap"><table><thead><tr><th>Pick</th><th>Lead</th><th>Email</th><th>Queue</th><th>Priority</th><th>Flags</th><th>Next action</th></tr></thead><tbody id="campaignTable"></tbody></table></div>
+            <div class="panel-grid">
+              <article class="panel"><p class="panel-label">Preview Lead</p><p id="campaignPreviewLead" class="detail-copy">Select a lead.</p><p id="campaignPreviewFlags" class="table-summary">-</p></article>
+              <article class="panel"><p class="panel-label">Preview Subject</p><p id="campaignPreviewSubject" class="detail-copy">-</p><p class="panel-label">Preview Body</p><p id="campaignPreviewBody" class="detail-copy">-</p></article>
+            </div>
+          </section>
+        </div>
+
+        <div id="calendarTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="calendarTabButton" hidden>
+          <header class="hero">
+            <div><p class="eyebrow">Calendar</p><h2>Google-first appointment control</h2></div>
+            <div class="hero-badge"><span class="hero-badge-label">Source</span><strong>Openclaw GOG</strong></div>
+          </header>
+          <section class="panel">
+            <iframe
+              id="calendarEmbedFrame"
+              title="Openclaw Google Calendar"
+              src=""
+              width="100%"
+              height="700"
+              frameborder="0"
+              scrolling="no"
+            ></iframe>
+          </section>
+        </div>
+
+        <div id="pipelineTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="pipelineTabButton" hidden>
+          <header class="hero"><div><p class="eyebrow">Carrier Pipeline</p><h2>Drag leads across the policy lifecycle</h2></div></header>
+          <section id="pipelineBoard" class="pipeline-board">
+            <article class="panel pipeline-column" data-pipeline-stage="app_submitted">
+              <div class="panel-header compact"><div><p class="panel-label">Stage</p><h3>App Submitted <span class="oc-tooltip" tabindex="0"><span class="oc-tooltip-icon" aria-hidden="true">ⓘ</span><span class="oc-tooltip-bubble" role="tooltip">Application sent via carrier portal. Waiting on initial review.</span></span></h3></div><div id="pipelineCount_app_submitted" class="table-summary">0</div></div>
+              <div class="pipeline-dropzone" data-pipeline-dropzone="app_submitted"></div>
+            </article>
+            <article class="panel pipeline-column" data-pipeline-stage="underwriting">
+              <div class="panel-header compact"><div><p class="panel-label">Stage</p><h3>Underwriting <span class="oc-tooltip" tabindex="0"><span class="oc-tooltip-icon" aria-hidden="true">ⓘ</span><span class="oc-tooltip-bubble" role="tooltip">Carrier requested APS, phone interview, or additional medical docs.</span></span></h3></div><div id="pipelineCount_underwriting" class="table-summary">0</div></div>
+              <div class="pipeline-dropzone" data-pipeline-dropzone="underwriting"></div>
+            </article>
+            <article class="panel pipeline-column" data-pipeline-stage="approved">
+              <div class="panel-header compact"><div><p class="panel-label">Stage</p><h3>Approved <span class="oc-tooltip" tabindex="0"><span class="oc-tooltip-icon" aria-hidden="true">ⓘ</span><span class="oc-tooltip-bubble" role="tooltip">Policy approved but waiting on first premium draft or e-signatures.</span></span></h3></div><div id="pipelineCount_approved" class="table-summary">0</div></div>
+              <div class="pipeline-dropzone" data-pipeline-dropzone="approved"></div>
+            </article>
+            <article class="panel pipeline-column" data-pipeline-stage="issued">
+              <div class="panel-header compact"><div><p class="panel-label">Stage</p><h3>Issued <span class="oc-tooltip" tabindex="0"><span class="oc-tooltip-icon" aria-hidden="true">ⓘ</span><span class="oc-tooltip-bubble" role="tooltip">Policy is active. Awaiting commission payout.</span></span></h3></div><div id="pipelineCount_issued" class="table-summary">0</div></div>
+              <div class="pipeline-dropzone" data-pipeline-dropzone="issued"></div>
+            </article>
+            <article class="panel pipeline-column" data-pipeline-stage="paid">
+              <div class="panel-header compact"><div><p class="panel-label">Stage</p><h3>Paid</h3></div><div id="pipelineCount_paid" class="table-summary">0</div></div>
+              <div class="pipeline-dropzone" data-pipeline-dropzone="paid"></div>
+            </article>
+          </section>
+        </div>
+
+        <div hidden aria-hidden="true">
+          <ul id="readinessList" class="check-list"></ul>
+          <textarea id="notesBody"></textarea>
+          <button id="notesSaveBtn" type="button"></button>
+          <button id="notesClearBtn" type="button"></button>
+          <button id="notesCopyBtn" type="button"></button>
+        </div>
+
+        <div id="carrierSettingsModal" class="calldesk-modal" role="dialog" aria-modal="true" aria-labelledby="carrierSettingsTitle" hidden>
+          <div class="calldesk-modal-card carrier-settings-modal">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Settings</p><h3 id="carrierSettingsTitle">Carrier Settings</h3></div>
+              <button id="carrierSettingsCloseBtn" class="ghost-button slim" type="button">Close</button>
+            </div>
+            <p class="table-summary">Save your writing number, portal link, and support phone for each carrier.</p>
+            <div id="carrierSettingsList" class="carrier-settings-list"></div>
+            <div class="detail-actions">
+              <button id="carrierSettingsSaveBtn" class="ghost-button slim" type="button">Save carrier settings</button>
+              <span id="carrierSettingsStatus" class="table-summary" aria-live="polite">Ready</span>
+            </div>
+          </div>
+        </div>
+      </main>
+    </div>
+
+    <script type="module" src="./app.js"></script>
+  </body>
+</html>

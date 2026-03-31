@@ -1,0 +1,86 @@
+[
+  {
+    "carrierId": "c_001",
+    "name": "Mutual of Omaha (Living Promise)",
+    "productType": "Final Expense",
+    "eligibility": {
+      "minAge": 45,
+      "maxAge": 85,
+      "acceptsTobacco": true,
+      "maxHealthRisk": "Managed"
+    },
+    "scriptSnippet": "Since you mentioned covering burial costs, Mutual of Omaha offers a strong day-one final expense path for managed health profiles."
+  },
+  {
+    "carrierId": "c_002",
+    "name": "AIG (Guaranteed Issue)",
+    "productType": "Final Expense",
+    "eligibility": {
+      "minAge": 50,
+      "maxAge": 80,
+      "acceptsTobacco": true,
+      "maxHealthRisk": "Challenging"
+    },
+    "scriptSnippet": "With the health concerns you shared, AIG's guaranteed issue path can keep coverage available without medical questions."
+  },
+  {
+    "carrierId": "c_003",
+    "name": "Foresters (PlanRight)",
+    "productType": "Final Expense",
+    "eligibility": {
+      "minAge": 50,
+      "maxAge": 85,
+      "acceptsTobacco": true,
+      "maxHealthRisk": "Challenging"
+    },
+    "scriptSnippet": "Foresters is a reliable final expense comparison option when we need flexibility around health history."
+  },
+  {
+    "carrierId": "c_004",
+    "name": "Ethos (Term)",
+    "productType": "Term",
+    "eligibility": {
+      "minAge": 20,
+      "maxAge": 65,
+      "acceptsTobacco": true,
+      "maxHealthRisk": "Managed"
+    },
+    "scriptSnippet": "Ethos can be a fast term option when speed matters and health is in a healthy-to-managed range."
+  },
+  {
+    "carrierId": "c_005",
+    "name": "SBLI (EasyTrak Term)",
+    "productType": "Term",
+    "eligibility": {
+      "minAge": 18,
+      "maxAge": 60,
+      "acceptsTobacco": true,
+      "maxHealthRisk": "Managed"
+    },
+    "scriptSnippet": "SBLI often fits younger term shoppers looking for straightforward underwriting and affordability."
+  },
+  {
+    "carrierId": "c_006",
+    "name": "Mutual of Omaha (Term Life Express)",
+    "productType": "Term",
+    "eligibility": {
+      "minAge": 18,
+      "maxAge": 75,
+      "acceptsTobacco": true,
+      "maxHealthRisk": "Managed"
+    },
+    "scriptSnippet": "Mutual of Omaha Term Life Express supports a broad age range when we need term beyond the digital-only lanes."
+  },
+  {
+    "carrierId": "c_007",
+    "name": "Corebridge (Term)",
+    "productType": "Term",
+    "eligibility": {
+      "minAge": 18,
+      "maxAge": 70,
+      "acceptsTobacco": true,
+      "maxHealthRisk": "Managed"
+    },
+    "scriptSnippet": "Corebridge is useful when we want to optimize term structure and compare beyond speed-first quotes."
+  }
+]

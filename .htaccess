@@ -1,0 +1,11 @@
+Options -Indexes
+
+RewriteEngine On
+
+# Force HTTPS
+RewriteCond %{HTTPS} !=on
+RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# Canonical host: redirect www to root domain
+RewriteCond %{HTTP_HOST} ^www\.insuredbylena\.com$ [NC]
+RewriteRule ^ https://insuredbylena.com%{REQUEST_URI} [L,R=301]

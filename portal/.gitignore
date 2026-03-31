@@ -1,0 +1,33 @@
+# OS / editor
+.DS_Store
+*.swp
+*.swo
+
+# Runtime / build artifacts
+node_modules/
+*.log
+
+# Environment & secrets
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+*credentials*.json
+credentials*.json
+
+# Local data / exports (may contain PII)
+data/
+database/
+exports/
+
+# Local screenshots and scratch outputs
+.shots/
+*.png
+*.jpg
+*.jpeg
+*.webp
+
+# Temporary docs from desktop workflow
+*.tmp

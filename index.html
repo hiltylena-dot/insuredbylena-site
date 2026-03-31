@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Insured by Lena | Life & Health Coverage</title>
+    <meta
+      name="description"
+      content="Expert life and health coverage designed by Lena to protect the people you love and the future you've built."
+    />
+    <meta property="og:title" content="Insured by Lena | Life & Health Coverage" />
+    <meta
+      property="og:description"
+      content="Expert life and health coverage designed by Lena to protect the people you love and the future you've built."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#1a2a3a" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./landing.css" />
+  </head>
+  <body>
+    <div class="ambient-layer" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <div class="brand">Insured by Lena</div>
+      <div class="header-contact">
+        <a href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a>
+        <a href="tel:+15616339964">+1 561 633 9964</a>
+      </div>
+      <nav class="header-nav" aria-label="Primary">
+        <a class="underline-link" href="#services">Services</a>
+        <a href="#path">Lena's Path</a>
+        <a class="underline-link" href="#contact">Contact</a>
+        <a class="team-link" href="#join-my-team">Join My Team</a>
+        <a class="portal-link" href="/portal/">Team Portal</a>
+      </nav>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="hero-layout">
+          <div class="hero-copy">
+            <p class="eyebrow">Life & Health Insurance Guidance</p>
+            <h1>Your Health is Your Wealth. Your Legacy is Your Promise.</h1>
+            <p class="lead">
+              Expert Life and Health coverage designed by Lena to protect the people you love and
+              the future you've built.
+            </p>
+            <div class="cta-row">
+              <a class="btn primary" href="#contact">Check My Eligibility</a>
+              <a class="btn ghost" href="#contact">Schedule a Consultation</a>
+            </div>
+            <form id="leadForm" class="hero-lead-form" aria-label="Quick eligibility form">
+              <input type="text" name="full_name" placeholder="Full name" required />
+              <input type="text" name="zip_code" placeholder="ZIP code" required />
+              <select name="coverage_need" required>
+                <option value="">Coverage need</option>
+                <option>Health Insurance</option>
+                <option>Life Insurance</option>
+                <option>Medicare</option>
+                <option>Final Expense</option>
+              </select>
+              <button class="btn primary" type="submit">Get My Options</button>
+            </form>
+            <p class="form-status" id="leadFormStatus" aria-live="polite"></p>
+            <p class="note">Serving families, seniors, and small business owners across health and life planning.</p>
+            <ul class="hero-signals" aria-label="Key service strengths">
+              <li>Licensed Advisor</li>
+              <li>A-Rated Plan Access</li>
+              <li>Fast Personal Response</li>
+            </ul>
+            <p class="compliance-note">Independent licensed broker support. Typical response time: within 15 minutes during business hours.</p>
+          </div>
+          <img
+            class="hero-photo"
+            src="./assets/images/lena-headshot.jpg"
+            alt="Lena, licensed life and health insurance advisor"
+            loading="eager"
+            decoding="async"
+          />
+        </div>
+      </section>
+
+      <section class="segment-strip" aria-label="Find your path">
+        <h2>Choose Your Starting Point</h2>
+        <div class="segment-actions">
+          <a class="segment-chip" href="#services">Under 65 Health Plans</a>
+          <a class="segment-chip" href="#services">Medicare Guidance</a>
+          <a class="segment-chip" href="#services">Family Life Coverage</a>
+          <a class="segment-chip" href="#services">Business Owner Benefits</a>
+        </div>
+      </section>
+
+      <section id="services" class="services editorial-services">
+        <article class="insurance-feature health-feature">
+          <div class="feature-copy service-block">
+            <p class="service-kicker">Health Insurance</p>
+            <h2>Live Well Today</h2>
+            <p class="service-intro">I simplify the complexity so you can choose confidently.</p>
+            <ul class="feature-list">
+              <li><strong>Individual & Family Plans:</strong> Navigating the marketplace so you don't have to.</li>
+              <li><strong>Medicare/Senior Care:</strong> Helping you transition into the best coverage for your golden years.</li>
+              <li><strong>Small Business Health:</strong> Custom group plans that keep your team and your bottom line healthy.</li>
+            </ul>
+            <div class="feature-actions">
+              <a class="btn primary" href="#contact">Check My Eligibility</a>
+              <a class="btn ghost" href="#contact">Schedule</a>
+            </div>
+          </div>
+          <div class="feature-media">
+            <img
+              src="./assets/images/health-lifestyle.jpg"
+              alt="Family spending active time outdoors"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+        </article>
+
+        <article class="insurance-feature life-feature">
+          <div class="feature-copy service-block">
+            <p class="service-kicker">Life Insurance</p>
+            <h2>Protect Tomorrow</h2>
+            <p class="service-intro">We focus on the emotional why and match it to the right policy.</p>
+            <ul class="feature-list">
+              <li><strong>Term Life:</strong> Affordable, high-value protection for your peak earning years.</li>
+              <li><strong>Whole/Universal Life:</strong> Building cash value and permanent security for your heirs.</li>
+              <li><strong>Final Expense:</strong> Ensuring your family is never burdened by the unexpected.</li>
+            </ul>
+            <div class="feature-actions">
+              <a class="btn primary" href="#contact">Check My Eligibility</a>
+              <a class="btn ghost" href="#contact">Schedule</a>
+            </div>
+          </div>
+          <div class="feature-media">
+            <img
+              src="./assets/images/life-lifestyle.jpg"
+              alt="Parent and child sharing a moment together"
+              loading="lazy"
+              decoding="async"
+            />
+          </div>
+        </article>
+      </section>
+
+      <section id="path" class="path">
+        <h2>Lena's Simplified Path</h2>
+        <div class="path-grid path-container">
+          <article class="path-step">
+            <span>1</span>
+            <h3>The Discovery</h3>
+            <p>A quick chat about your health goals and family legacy.</p>
+          </article>
+          <article class="path-step">
+            <span>2</span>
+            <h3>The Custom Fit</h3>
+            <p>
+              I compare multiple A-rated options to find your Goldilocks plan, not too much and not too little.
+            </p>
+          </article>
+          <article class="path-step">
+            <span>3</span>
+            <h3>The Lifeline</h3>
+            <p>I stay your point of contact for claims, updates, and life changes.</p>
+          </article>
+        </div>
+      </section>
+
+      <section class="trust">
+        <article class="bio meet-lena-section">
+          <div class="bio-content meet-lena-text">
+            <p class="section-label">Meet Lena</p>
+            <h2>Your Advisor, Not Just Your Agent</h2>
+            <div class="bio-copy">
+              <p>
+                I'm Lena, and I believe insurance shouldn't be a transaction, it should be a relationship.
+                I help you navigate the fine print so you can focus on living.
+              </p>
+              <p>
+                From first quote to life updates and claim questions, I stay accessible so your coverage can keep
+                pace with the people and future you're protecting.
+              </p>
+            </div>
+            <ul class="bio-points" aria-label="Advisor value points">
+              <li>Plan design based on your household priorities</li>
+              <li>Clear comparison across life and health options</li>
+              <li>Ongoing support for renewals, claims, and life changes</li>
+            </ul>
+            <a class="btn primary" href="#contact">Speak with Lena</a>
+          </div>
+          <img
+            class="bio-photo meet-lena-photo"
+            src="./assets/images/lena-headshot.jpg"
+            alt="Lena, licensed life and health insurance advisor"
+            loading="lazy"
+            decoding="async"
+          />
+        </article>
+      </section>
+
+      <section class="next-steps" aria-label="What happens next">
+        <h2>What Happens Next</h2>
+        <div class="next-grid">
+          <article>
+            <h3>1. Quick Intake</h3>
+            <p>Submit your details and priorities so we can pre-screen the right coverage lanes.</p>
+          </article>
+          <article>
+            <h3>2. Plan Comparison</h3>
+            <p>Get side-by-side options that match your household goals and budget.</p>
+          </article>
+          <article>
+            <h3>3. Fast Follow-up</h3>
+            <p>You get a text/call follow-up quickly, with next steps clearly explained before you decide.</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact" class="contact-section" aria-label="Schedule a consultation">
+        <div class="contact-copy">
+          <p class="section-label">Schedule a Consultation</p>
+          <h2>Book a quick conversation with Lena</h2>
+          <p>
+            Tell us what you need and the best way to reach you. We’ll follow up quickly with next steps,
+            whether you’re shopping for coverage or ready to review a better fit.
+          </p>
+          <ul class="contact-points">
+            <li>Fast response during business hours</li>
+            <li>Health, life, and Medicare guidance</li>
+            <li>Easy scheduling for a 15-minute consult</li>
+          </ul>
+        </div>
+        <form id="consultForm" class="consult-form">
+          <div class="form-grid">
+            <label>
+              <span>Name</span>
+              <input type="text" name="name" placeholder="Your full name" required />
+            </label>
+            <label>
+              <span>Email</span>
+              <input type="email" name="email" placeholder="you@example.com" required />
+            </label>
+            <label>
+              <span>Phone</span>
+              <input type="tel" name="phone" placeholder="(561) 633-9964" />
+            </label>
+            <label>
+              <span>Coverage need</span>
+              <select name="coverage_need" required>
+                <option value="">Choose one</option>
+                <option>Health Insurance</option>
+                <option>Life Insurance</option>
+                <option>Medicare</option>
+                <option>Business Coverage</option>
+              </select>
+            </label>
+            <label>
+              <span>Preferred time</span>
+              <input type="text" name="preferred_time" placeholder="Morning, afternoon, or evening" />
+            </label>
+            <label class="form-wide">
+              <span>What can we help with?</span>
+              <textarea name="message" rows="4" placeholder="Tell Lena a little about your goals."></textarea>
+            </label>
+          </div>
+          <div class="consult-actions">
+            <button class="btn primary" type="submit">Schedule a Consultation</button>
+            <p class="form-note">Or reach Lena directly at <a href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a> or <a href="tel:+15616339964">+1 561 633 9964</a>.</p>
+          </div>
+        </form>
+        <p class="form-status" id="consultFormStatus" aria-live="polite"></p>
+        <div id="join-my-team" class="join-team-panel">
+          <p class="section-label">Join My Team</p>
+          <h2>Thinking about a career in insurance?</h2>
+          <p>
+            If you’re licensed or working toward it, reach out to explore support, mentorship, and
+            team opportunities.
+          </p>
+          <a class="btn ghost" href="mailto:hello@insuredbylena.com?subject=Join%20My%20Team">Email About Joining</a>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="footer-line">© <span id="year"></span> Insured by Lena</p>
+    </footer>
+
+    <div class="sticky-contact-bar" role="contentinfo" aria-label="Quick contact">
+      <a href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a>
+      <span aria-hidden="true">|</span>
+      <a href="tel:+15616339964">+1 561 633 9964</a>
+    </div>
+
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      const pathSteps = document.querySelectorAll(".path-grid article");
+      const pathSection = document.querySelector(".path-grid");
+      const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+      if (pathSection && pathSteps.length && !prefersReducedMotion) {
+        const observer = new IntersectionObserver(
+          (entries, obs) => {
+            entries.forEach((entry) => {
+              if (!entry.isIntersecting) return;
+
+              pathSteps.forEach((step, index) => {
+                window.setTimeout(() => step.classList.add("is-visible"), index * 160);
+              });
+
+              obs.unobserve(entry.target);
+            });
+          },
+          { threshold: 0.25 }
+        );
+
+        observer.observe(pathSection);
+      } else {
+        pathSteps.forEach((step) => step.classList.add("is-visible"));
+      }
+
+      function trackEvent(name, props) {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({ event: name, ...props });
+      }
+
+      const PUBLIC_INTAKE_ENDPOINT = "http://127.0.0.1:8787/api/public/intake";
+
+      function setFormStatus(form, message, tone) {
+        const status = document.getElementById(form.id === "leadForm" ? "leadFormStatus" : "consultFormStatus");
+        if (!status) return;
+        status.textContent = message || "";
+        status.dataset.tone = tone || "";
+      }
+
+      async function submitPublicIntake(form, payload, successLabel) {
+        const submitBtn = form.querySelector("button[type='submit']");
+        const originalLabel = submitBtn ? submitBtn.textContent : "";
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Sending...";
+        }
+        setFormStatus(form, "Sending your request...", "");
+
+        try {
+          const response = await fetch(PUBLIC_INTAKE_ENDPOINT, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json"
+            },
+            body: JSON.stringify(payload)
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.ok) {
+            throw new Error(result.error || `Request failed (${response.status})`);
+          }
+          form.reset();
+          if (form.id === "leadForm") {
+            setFormStatus(form, "Thanks. We’ll review your details and reach out with the best next steps.", "success");
+          } else {
+            setFormStatus(form, "Thanks. Lena’s team will follow up shortly to schedule your consultation.", "success");
+          }
+          if (submitBtn) {
+            submitBtn.textContent = successLabel;
+            window.setTimeout(() => {
+              submitBtn.textContent = originalLabel;
+              submitBtn.disabled = false;
+            }, 1800);
+          }
+          return result;
+        } catch (error) {
+          console.error("Public intake submit failed:", error);
+          setFormStatus(form, "Something went wrong. Please try again in a moment.", "error");
+          if (submitBtn) {
+            submitBtn.textContent = "Try Again";
+            submitBtn.disabled = false;
+            window.setTimeout(() => {
+              submitBtn.textContent = originalLabel;
+            }, 1800);
+          }
+          return null;
+        }
+      }
+
+      document.querySelectorAll("a.btn").forEach((btn) => {
+        btn.addEventListener("click", () => {
+          trackEvent("cta_click", { cta_text: btn.textContent.trim() });
+        });
+      });
+
+      const leadForm = document.getElementById("leadForm");
+      if (leadForm) {
+        leadForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const formData = new FormData(leadForm);
+          trackEvent("lead_form_submit", {
+            coverage_need: formData.get("coverage_need") || "",
+            zip_code: formData.get("zip_code") || ""
+          });
+          await submitPublicIntake(
+            leadForm,
+            {
+              source: "quick_eligibility",
+              fullName: formData.get("full_name") || "",
+              zipCode: formData.get("zip_code") || "",
+              coverageNeed: formData.get("coverage_need") || ""
+            },
+            "Submitted"
+          );
+        });
+      }
+
+      const consultForm = document.getElementById("consultForm");
+      if (consultForm) {
+        consultForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const formData = new FormData(consultForm);
+          trackEvent("consult_form_submit", {
+            coverage_need: formData.get("coverage_need") || "",
+            preferred_time: formData.get("preferred_time") || ""
+          });
+          await submitPublicIntake(
+            consultForm,
+            {
+              source: "consultation",
+              fullName: formData.get("name") || "",
+              email: formData.get("email") || "",
+              phone: formData.get("phone") || "",
+              coverageNeed: formData.get("coverage_need") || "",
+              preferredTime: formData.get("preferred_time") || "",
+              message: formData.get("message") || ""
+            },
+            "Request Sent"
+          );
+        });
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "InsuranceAgency",
+        "name": "Insured by Lena",
+        "email": "hello@insuredbylena.com",
+        "telephone": "+1-561-633-9964",
+        "url": "https://insuredbylena.com"
+      }
+    </script>
+  </body>
+</html>

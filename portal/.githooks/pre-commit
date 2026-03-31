@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Block accidental file deletions unless explicitly allowed.
+if [ "${ALLOW_DELETIONS:-0}" = "1" ]; then
+  exit 0
+fi
+
+deleted_files=$(git diff --cached --name-status --diff-filter=D)
+if [ -n "$deleted_files" ]; then
+  echo ""
+  echo "Blocked: commit includes deleted files."
+  echo "$deleted_files"
+  echo ""
+  echo "If intentional, re-run with: ALLOW_DELETIONS=1 git commit ..."
+  exit 1
+fi

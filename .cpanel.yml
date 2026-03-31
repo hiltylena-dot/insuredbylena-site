@@ -1,0 +1,6 @@
+deployment:
+  tasks:
+    - export DEPLOYPATH=/home/CPANEL_USERNAME/public_html
+    - /bin/mkdir -p $DEPLOYPATH
+    - /bin/cp -R * $DEPLOYPATH
+    - /bin/cp .htaccess $DEPLOYPATH/.htaccess 2>/dev/null || true
