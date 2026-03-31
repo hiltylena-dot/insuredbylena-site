@@ -8,6 +8,7 @@ Static website for `insuredbylena.com`.
 - `/landing.css` -> landing page styles
 - `/portal/` -> internal dashboard app
 - `/.cpanel.yml` -> cPanel Git deploy tasks
+- `/.github/workflows/deploy-release.yml` -> release-based upload to Namecheap
 
 ## Local preview
 
@@ -25,3 +26,16 @@ Open:
 
 - Update phone/email in `index.html` before launch.
 - Replace `CPANEL_USERNAME` in `.cpanel.yml` with your real cPanel username.
+
+## Release deploy
+
+To automate uploads when you publish a GitHub Release, add these repository secrets:
+
+- `NAMECHEAP_SFTP_HOST` -> `server367.web-hosting.com`
+- `NAMECHEAP_SFTP_USERNAME` -> your cPanel username
+- `NAMECHEAP_SFTP_PASSWORD` -> your cPanel or SFTP password
+- `NAMECHEAP_SFTP_PORT` -> optional, defaults to `22`
+- `NAMECHEAP_REMOTE_ROOT` -> optional, defaults to `/home/insubhmy/public_html`
+- `NAMECHEAP_PORTAL_AUTH_DIR` -> optional, defaults to `/home/insubhmy/portal-auth`
+
+The workflow mirrors the repo to the hosting account and refreshes the portal auth file at `/portal`.

@@ -1,0 +1,38 @@
+name: Deploy Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or SHA to deploy
+        required: false
+        default: main
+
+concurrency:
+  group: insuredbylena-release-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.ref || 'main' }}
+
+      - name: Install lftp
+        run: sudo apt-get update && sudo apt-get install -y lftp
+
+      - name: Deploy to Namecheap
+        env:
+          DEPLOY_HOST: ${{ secrets.NAMECHEAP_SFTP_HOST }}
+          DEPLOY_USER: ${{ secrets.NAMECHEAP_SFTP_USERNAME }}
+          DEPLOY_PASSWORD: ${{ secrets.NAMECHEAP_SFTP_PASSWORD }}
+          DEPLOY_PORT: ${{ secrets.NAMECHEAP_SFTP_PORT }}
+          REMOTE_ROOT: ${{ secrets.NAMECHEAP_REMOTE_ROOT }}
+          REMOTE_PORTAL_AUTH_DIR: ${{ secrets.NAMECHEAP_PORTAL_AUTH_DIR }}
+          AUTH_FILE_LOCAL: .htpasswd
+        run: bash scripts/deploy-release.sh
