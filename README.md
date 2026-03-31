@@ -8,7 +8,7 @@ Static website for `insuredbylena.com`.
 - `/landing.css` -> landing page styles
 - `/portal/` -> internal dashboard app
 - `/.cpanel.yml` -> cPanel Git deploy tasks
-- `/.github/workflows/deploy-release.yml` -> release-based upload to Namecheap
+- `/.github/workflows/deploy-release.yml` -> automatic upload to Namecheap on push to `main`
 
 ## Local preview
 
@@ -29,9 +29,9 @@ Open:
 - For production form submissions, replace the live intake URL in `index.html` with the Google Apps Script deployment URL in [google-intake/README.md](/Users/hankybot/Documents/Playground/insuredbylena-site/google-intake/README.md).
 - The hero/consultation forms still work locally against `http://127.0.0.1:8787/api/public/intake`.
 
-## Release deploy
+## Automatic deploy
 
-To automate uploads when you publish a GitHub Release, add these repository secrets:
+To automate uploads from GitHub to Namecheap, add these repository secrets:
 
 - `NAMECHEAP_SFTP_HOST` -> `server367.web-hosting.com`
 - `NAMECHEAP_SFTP_USERNAME` -> your cPanel username
@@ -41,3 +41,4 @@ To automate uploads when you publish a GitHub Release, add these repository secr
 - `NAMECHEAP_PORTAL_AUTH_DIR` -> optional, defaults to `/home/insubhmy/portal-auth`
 
 The workflow mirrors the repo to the hosting account and refreshes the portal auth file at `/portal`.
+It runs on every push to `main`, and you can still run it manually from GitHub Actions if needed.
