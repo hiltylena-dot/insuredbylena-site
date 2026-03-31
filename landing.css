@@ -923,6 +923,10 @@ p {
   margin-bottom: 14px;
 }
 
+.join-team-form {
+  margin-top: 18px;
+}
+
 .contact-copy {
   max-width: 36ch;
 }

@@ -287,7 +287,46 @@
             If you’re licensed or working toward it, reach out to explore support, mentorship, and
             team opportunities.
           </p>
-          <a class="btn ghost" href="mailto:hello@insuredbylena.com?subject=Join%20My%20Team">Email About Joining</a>
+          <form id="joinTeamForm" class="consult-form join-team-form">
+            <div class="form-grid">
+              <label>
+                <span>Name</span>
+                <input type="text" name="name" placeholder="Your full name" required />
+              </label>
+              <label>
+                <span>Email</span>
+                <input type="email" name="email" placeholder="you@example.com" required />
+              </label>
+              <label>
+                <span>Phone</span>
+                <input type="tel" name="phone" placeholder="(561) 633-9964" />
+              </label>
+              <label>
+                <span>Experience</span>
+                <select name="experience" required>
+                  <option value="">Select one</option>
+                  <option>Licensed now</option>
+                  <option>Working toward license</option>
+                  <option>Exploring opportunities</option>
+                </select>
+              </label>
+              <label class="form-wide">
+                <span>Tell us a bit about yourself</span>
+                <textarea
+                  name="message"
+                  rows="4"
+                  placeholder="Share your background, goals, and the best time to connect."
+                ></textarea>
+              </label>
+            </div>
+            <div class="consult-actions">
+              <button class="btn primary" type="submit">Send My Details</button>
+              <p class="form-note">
+                Or email Lena directly at <a href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a>.
+              </p>
+            </div>
+          </form>
+          <p class="form-status" id="joinTeamFormStatus" aria-live="polite"></p>
         </div>
       </section>
     </main>
@@ -338,7 +377,12 @@
       const PUBLIC_INTAKE_ENDPOINT = "http://127.0.0.1:8787/api/public/intake";
 
       function setFormStatus(form, message, tone) {
-        const status = document.getElementById(form.id === "leadForm" ? "leadFormStatus" : "consultFormStatus");
+        const statusMap = {
+          leadForm: "leadFormStatus",
+          consultForm: "consultFormStatus",
+          joinTeamForm: "joinTeamFormStatus"
+        };
+        const status = document.getElementById(statusMap[form.id] || "consultFormStatus");
         if (!status) return;
         status.textContent = message || "";
         status.dataset.tone = tone || "";
@@ -443,6 +487,29 @@
               message: formData.get("message") || ""
             },
             "Request Sent"
+          );
+        });
+      }
+
+      const joinTeamForm = document.getElementById("joinTeamForm");
+      if (joinTeamForm) {
+        joinTeamForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const formData = new FormData(joinTeamForm);
+          trackEvent("join_team_submit", {
+            experience: formData.get("experience") || ""
+          });
+          await submitPublicIntake(
+            joinTeamForm,
+            {
+              source: "join_team",
+              fullName: formData.get("name") || "",
+              email: formData.get("email") || "",
+              phone: formData.get("phone") || "",
+              coverageNeed: formData.get("experience") || "Join My Team",
+              message: formData.get("message") || ""
+            },
+            "Sent"
           );
         });
       }
