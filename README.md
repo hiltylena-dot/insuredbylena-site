@@ -40,5 +40,5 @@ To automate uploads from GitHub to Namecheap, add these repository secrets:
 - `NAMECHEAP_REMOTE_ROOT` -> optional, defaults to `/home/insubhmy/public_html`
 - `NAMECHEAP_PORTAL_AUTH_DIR` -> optional, defaults to `/home/insubhmy/portal-auth`
 
-The workflow mirrors the repo to the hosting account with `rsync` over SSH and refreshes the portal auth file at `/portal`.
+The workflow mirrors the repo to the hosting account with `lftp` over SFTP and refreshes the portal auth file at `/portal`.
 It runs on every push to `main`, and you can still run it manually from GitHub Actions if needed.
