@@ -56,21 +56,8 @@
             </p>
             <div class="cta-row">
               <a class="btn primary" href="#contact">Check My Eligibility</a>
-              <a class="btn ghost" href="#contact">Schedule a Consultation</a>
+              <a class="btn ghost" href="#contact">Speak with Lena</a>
             </div>
-            <form id="leadForm" class="hero-lead-form" aria-label="Quick eligibility form">
-              <input type="text" name="full_name" placeholder="Full name" required />
-              <input type="text" name="zip_code" placeholder="ZIP code" required />
-              <select name="coverage_need" required>
-                <option value="">Coverage need</option>
-                <option>Health Insurance</option>
-                <option>Life Insurance</option>
-                <option>Medicare</option>
-                <option>Final Expense</option>
-              </select>
-              <button class="btn primary" type="submit">Get My Options</button>
-            </form>
-            <p class="form-status" id="leadFormStatus" aria-live="polite"></p>
             <p class="note">Serving families, seniors, and small business owners across health and life planning.</p>
             <ul class="hero-signals" aria-label="Key service strengths">
               <li>Licensed Advisor</li>
@@ -112,7 +99,7 @@
             </ul>
             <div class="feature-actions">
               <a class="btn primary" href="#contact">Check My Eligibility</a>
-              <a class="btn ghost" href="#contact">Schedule</a>
+              <a class="btn ghost" href="#contact">Speak with Lena</a>
             </div>
           </div>
           <div class="feature-media">
@@ -137,7 +124,7 @@
             </ul>
             <div class="feature-actions">
               <a class="btn primary" href="#contact">Check My Eligibility</a>
-              <a class="btn ghost" href="#contact">Schedule</a>
+              <a class="btn ghost" href="#contact">Speak with Lena</a>
             </div>
           </div>
           <div class="feature-media">
@@ -156,8 +143,8 @@
         <div class="path-grid path-container">
           <article class="path-step">
             <span>1</span>
-            <h3>The Discovery</h3>
-            <p>A quick chat about your health goals and family legacy.</p>
+            <h3>The Consultation</h3>
+            <p>A focused 15-minute conversation about your goals, priorities, and the coverage lanes that fit.</p>
           </article>
           <article class="path-step">
             <span>2</span>
@@ -213,12 +200,12 @@
         <h2>What Happens Next</h2>
         <div class="next-grid">
           <article>
-            <h3>1. Quick Intake</h3>
-            <p>Submit your details and priorities so we can pre-screen the right coverage lanes.</p>
+            <h3>1. 15-Min Consultation</h3>
+            <p>Start with a focused conversation about your goals, timeline, and priorities.</p>
           </article>
           <article>
             <h3>2. Plan Comparison</h3>
-            <p>Get side-by-side options that match your household goals and budget.</p>
+            <p>We compare options that match your household goals, budget, and coverage needs.</p>
           </article>
           <article>
             <h3>3. Fast Follow-up</h3>
@@ -275,7 +262,7 @@
             </label>
           </div>
           <div class="consult-actions">
-            <button class="btn primary" type="submit">Schedule a Consultation</button>
+            <button class="btn primary" type="submit">Check My Eligibility</button>
             <p class="form-note">Or reach Lena directly at <a href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a> or <a href="tel:+15616339964">+1 561 633 9964</a>.</p>
           </div>
         </form>
@@ -332,7 +319,7 @@
     </main>
 
     <footer class="site-footer">
-      <p class="footer-line">© <span id="year"></span> Insured by Lena</p>
+      <p class="footer-line">© <span id="year"></span> Insured by Lena | Licensed Insurance Professional | NPN: [INSERT NPN # HERE]</p>
     </footer>
 
     <div class="sticky-contact-bar" role="contentinfo" aria-label="Quick contact">
@@ -378,7 +365,6 @@
 
       function setFormStatus(form, message, tone) {
         const statusMap = {
-          leadForm: "leadFormStatus",
           consultForm: "consultFormStatus",
           joinTeamForm: "joinTeamFormStatus"
         };
@@ -411,10 +397,12 @@
             throw new Error(result.error || `Request failed (${response.status})`);
           }
           form.reset();
-          if (form.id === "leadForm") {
-            setFormStatus(form, "Thanks. We’ll review your details and reach out with the best next steps.", "success");
-          } else {
+          if (form.id === "consultForm") {
             setFormStatus(form, "Thanks. Lena’s team will follow up shortly to schedule your consultation.", "success");
+          } else if (form.id === "joinTeamForm") {
+            setFormStatus(form, "Thanks. We’ll review your details and be in touch about team opportunities.", "success");
+          } else {
+            setFormStatus(form, "Thanks. We’ll review your details and reach out with next steps.", "success");
           }
           if (submitBtn) {
             submitBtn.textContent = successLabel;
@@ -443,28 +431,6 @@
           trackEvent("cta_click", { cta_text: btn.textContent.trim() });
         });
       });
-
-      const leadForm = document.getElementById("leadForm");
-      if (leadForm) {
-        leadForm.addEventListener("submit", async (event) => {
-          event.preventDefault();
-          const formData = new FormData(leadForm);
-          trackEvent("lead_form_submit", {
-            coverage_need: formData.get("coverage_need") || "",
-            zip_code: formData.get("zip_code") || ""
-          });
-          await submitPublicIntake(
-            leadForm,
-            {
-              source: "quick_eligibility",
-              fullName: formData.get("full_name") || "",
-              zipCode: formData.get("zip_code") || "",
-              coverageNeed: formData.get("coverage_need") || ""
-            },
-            "Submitted"
-          );
-        });
-      }
 
       const consultForm = document.getElementById("consultForm");
       if (consultForm) {
