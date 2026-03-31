@@ -198,7 +198,7 @@ main,
 }
 
 .hero-photo {
-  width: min(420px, 100%);
+  width: min(360px, 100%);
   aspect-ratio: 4 / 5;
   object-fit: cover;
   object-position: center 14%;
@@ -626,7 +626,7 @@ main > section + section {
 }
 
 .bio-photo {
-  width: min(340px, 100%);
+  width: min(300px, 100%);
   aspect-ratio: 4 / 5;
   object-fit: cover;
   object-position: center 14%;
@@ -802,16 +802,14 @@ p {
 
 .feature-media img {
   display: block;
-  width: 82%;
-  height: 220px;
+  width: 70%;
+  height: 190px;
   aspect-ratio: 16 / 10;
-  max-height: 220px;
+  max-height: 190px;
   object-fit: cover;
   border-radius: 20px;
   box-shadow:
-    0 16px 30px rgba(26, 42, 58, 0.1),
-    inset 0 0 0 1px rgba(255, 255, 255, 0.26),
-    inset 0 0 24px rgba(255, 255, 255, 0.1);
+    0 14px 28px rgba(26, 42, 58, 0.08);
   margin-left: auto;
 }
 
@@ -841,7 +839,7 @@ p {
 }
 
 .meet-lena-photo {
-  width: min(460px, 100%);
+  width: min(320px, 100%);
   max-width: 100%;
   border-radius: 24px;
   border: none;
@@ -1252,7 +1250,7 @@ p {
 }
 
 .meet-lena-photo {
-  width: min(420px, 100%) !important;
+  width: min(320px, 100%) !important;
   justify-self: end !important;
   align-self: center !important;
   border-radius: 24px !important;
@@ -1334,7 +1332,7 @@ p {
 
   .bio-photo {
     justify-self: center;
-    width: min(300px, 100%);
+    width: min(260px, 100%);
   }
 
   .insurance-feature {
@@ -1352,7 +1350,9 @@ p {
   }
 
   .feature-media img {
-    min-height: 260px;
+    width: 100%;
+    height: 220px;
+    max-height: 220px;
   }
 
   .next-grid {
@@ -1538,7 +1538,7 @@ main > section + section {
 .meet-lena-photo {
   align-self: center !important;
   justify-self: end !important;
-  width: min(420px, 100%) !important;
+  width: min(320px, 100%) !important;
   border: none !important;
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1) !important;
 }
