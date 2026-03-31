@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-DEPLOY_HOST="${DEPLOY_HOST:?Set DEPLOY_HOST}"
-DEPLOY_USER="${DEPLOY_USER:?Set DEPLOY_USER}"
+DEPLOY_HOST="${DEPLOY_HOST:-server367.web-hosting.com}"
+DEPLOY_USER="${DEPLOY_USER:-insubhmy}"
 DEPLOY_PASSWORD="${DEPLOY_PASSWORD:?Set DEPLOY_PASSWORD}"
 DEPLOY_PORT="${DEPLOY_PORT:-21098}"
 REMOTE_ROOT="${REMOTE_ROOT:-/home/insubhmy/public_html}"
