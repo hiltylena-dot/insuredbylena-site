@@ -363,8 +363,8 @@
 
       const PUBLIC_INTAKE_ENDPOINT =
         window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-          ? "http://127.0.0.1:8787/api/public/intake"
-          : "https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec";
+        ? "http://127.0.0.1:8787/api/public/intake"
+        : "https://script.google.com/macros/s/AKfycbzlV2CFwUdCT3NGOE_MskTodKs7flQ-ve2jdMu__GtGochXvofUL-fwvghZMblkjfFU/exec";
 
       function isGoogleEndpoint(url) {
         return url.includes("script.google.com/macros");
