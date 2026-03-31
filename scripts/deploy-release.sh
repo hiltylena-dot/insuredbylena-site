@@ -18,27 +18,36 @@ tmpdir="$(mktemp -d)"
 trap 'rm -rf "$tmpdir"' EXIT
 cp "$AUTH_FILE_LOCAL" "$tmpdir/.htpasswd"
 
-if ! command -v lftp >/dev/null 2>&1; then
-  echo "lftp is not installed" >&2
+if ! command -v rsync >/dev/null 2>&1; then
+  echo "rsync is not installed" >&2
   exit 1
 fi
 
-lftp -u "$DEPLOY_USER","$DEPLOY_PASSWORD" "sftp://$DEPLOY_HOST:$DEPLOY_PORT" <<EOF
-set sftp:auto-confirm yes
-set net:timeout 20
-set net:max-retries 2
-set net:persist-retries 1
-mkdir -p "$REMOTE_ROOT"
-mirror --reverse --verbose --delete \
-  --exclude-glob .git* \
-  --exclude-glob .github* \
-  --exclude-glob .cpanel.yml \
-  --exclude-glob .htpasswd \
-  --exclude-glob .DS_Store \
-  --exclude-glob README.md \
-  --exclude-glob scripts/* \
-  . "$REMOTE_ROOT"
-mkdir -p "$REMOTE_PORTAL_AUTH_DIR"
-put "$tmpdir/.htpasswd" -o "$REMOTE_PORTAL_AUTH_DIR/.htpasswd"
-bye
-EOF
+if ! command -v sshpass >/dev/null 2>&1; then
+  echo "sshpass is not installed" >&2
+  exit 1
+fi
+
+export SSHPASS="$DEPLOY_PASSWORD"
+SSH_CMD="ssh -p ${DEPLOY_PORT} -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o ConnectTimeout=20"
+
+sshpass -e ssh -p "$DEPLOY_PORT" -o StrictHostKeyChecking=accept-new -o ServerAliveInterval=15 -o ServerAliveCountMax=2 -o ConnectTimeout=20 \
+  "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p '$REMOTE_ROOT' '$REMOTE_PORTAL_AUTH_DIR'"
+
+sshpass -e rsync -az --delete --delete-excluded \
+  --exclude '.git/' \
+  --exclude '.github/' \
+  --exclude '.cpanel.yml' \
+  --exclude '.htpasswd' \
+  --exclude '.DS_Store' \
+  --exclude 'README.md' \
+  --exclude 'scripts/' \
+  --exclude 'google-intake/' \
+  --exclude 'portal/README.md' \
+  --exclude 'portal/.gitignore' \
+  -e "$SSH_CMD" \
+  ./ "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_ROOT/"
+
+sshpass -e rsync -az \
+  -e "$SSH_CMD" \
+  "$tmpdir/.htpasswd" "$DEPLOY_USER@$DEPLOY_HOST:$REMOTE_PORTAL_AUTH_DIR/.htpasswd"
