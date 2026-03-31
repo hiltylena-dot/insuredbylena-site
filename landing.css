@@ -852,7 +852,8 @@ p {
   gap: 12px;
   align-self: start;
   justify-self: end;
-  align-items: flex-start;
+  align-items: stretch;
+  width: min(280px, 100%);
 }
 
 .portrait-caption {
@@ -861,7 +862,8 @@ p {
   font-family: "Playfair Display", serif;
   font-size: 1.1rem;
   letter-spacing: -0.01em;
-  text-align: left;
+  text-align: center;
+  width: 100%;
 }
 
 .next-steps {
