@@ -26,6 +26,8 @@ Open:
 
 - Update phone/email in `index.html` before launch.
 - Replace `CPANEL_USERNAME` in `.cpanel.yml` with your real cPanel username.
+- For production form submissions, replace the live intake URL in `index.html` with the Google Apps Script deployment URL in [google-intake/README.md](/Users/hankybot/Documents/Playground/insuredbylena-site/google-intake/README.md).
+- The hero/consultation forms still work locally against `http://127.0.0.1:8787/api/public/intake`.
 
 ## Release deploy
 

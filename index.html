@@ -361,7 +361,14 @@
         window.dataLayer.push({ event: name, ...props });
       }
 
-      const PUBLIC_INTAKE_ENDPOINT = "http://127.0.0.1:8787/api/public/intake";
+      const PUBLIC_INTAKE_ENDPOINT =
+        window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+          ? "http://127.0.0.1:8787/api/public/intake"
+          : "https://script.google.com/macros/s/REPLACE_WITH_DEPLOYMENT_ID/exec";
+
+      function isGoogleEndpoint(url) {
+        return url.includes("script.google.com/macros");
+      }
 
       function setFormStatus(form, message, tone) {
         const statusMap = {
@@ -384,17 +391,30 @@
         setFormStatus(form, "Sending your request...", "");
 
         try {
-          const response = await fetch(PUBLIC_INTAKE_ENDPOINT, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Accept: "application/json"
-            },
-            body: JSON.stringify(payload)
-          });
-          const result = await response.json().catch(() => ({}));
-          if (!response.ok || !result.ok) {
-            throw new Error(result.error || `Request failed (${response.status})`);
+          let result = { ok: true };
+          if (isGoogleEndpoint(PUBLIC_INTAKE_ENDPOINT)) {
+            const body = new URLSearchParams();
+            Object.entries(payload).forEach(([key, value]) => {
+              body.set(key, value ?? "");
+            });
+            await fetch(PUBLIC_INTAKE_ENDPOINT, {
+              method: "POST",
+              mode: "no-cors",
+              body
+            });
+          } else {
+            const response = await fetch(PUBLIC_INTAKE_ENDPOINT, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json"
+              },
+              body: JSON.stringify(payload)
+            });
+            result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.ok) {
+              throw new Error(result.error || `Request failed (${response.status})`);
+            }
           }
           form.reset();
           if (form.id === "consultForm") {
