@@ -1,6 +1,8 @@
 deployment:
   tasks:
     - export DEPLOYPATH=/home/insubhmy/public_html
+    - /bin/mkdir -p /home/insubhmy/portal-auth
     - /bin/mkdir -p $DEPLOYPATH
+    - /bin/cp .htpasswd /home/insubhmy/portal-auth/.htpasswd
     - /bin/cp -R * $DEPLOYPATH
     - /bin/cp .htaccess $DEPLOYPATH/.htaccess 2>/dev/null || true
