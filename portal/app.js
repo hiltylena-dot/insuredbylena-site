@@ -22,6 +22,9 @@ const state = {
   sales: [],
   targets: [],
   sourcedLeads: [],
+  contentPosts: [],
+  contentPublishJobs: [],
+  contentRevisions: [],
   carrierDocs: [],
   carrierGrid: [],
   todayAppointments: [],
@@ -34,6 +37,14 @@ const state = {
     selectedSourcedLeadId: "",
     selectedLeadSelectionId: "",
     selectedCampaignLeadId: "",
+    selectedContentPostId: "",
+    contentSelectedPostIds: [],
+    contentDraftOverrides: {},
+    contentPreviewPlatform: "instagram",
+    contentPostSearch: "",
+    contentPostWeekFilter: "",
+    contentPostPlatformFilter: "",
+    contentPostStatusFilter: "",
     campaignSelectedLeadIds: [],
     selectedCallDeskLeadId: "",
     currentCallLeadId: "",
@@ -68,6 +79,28 @@ const state = {
   },
   sourcedLeadState: {},
 };
+
+function getContentDraftOverride(postId) {
+  const normalized = String(postId || "").trim();
+  if (!normalized) return {};
+  return state.ui.contentDraftOverrides?.[normalized] || {};
+}
+
+function setContentDraftOverride(postId, patch) {
+  const normalized = String(postId || "").trim();
+  if (!normalized || !patch || typeof patch !== "object") return;
+  state.ui.contentDraftOverrides = state.ui.contentDraftOverrides || {};
+  state.ui.contentDraftOverrides[normalized] = {
+    ...(state.ui.contentDraftOverrides[normalized] || {}),
+    ...patch,
+  };
+}
+
+function clearContentDraftOverride(postId) {
+  const normalized = String(postId || "").trim();
+  if (!normalized || !state.ui.contentDraftOverrides?.[normalized]) return;
+  delete state.ui.contentDraftOverrides[normalized];
+}
 
 function createGlobalStore(initial) {
   const listeners = new Set();
@@ -104,15 +137,21 @@ const ACTIVE_SESSION_STORAGE_KEY = "openclaw_active_session";
 const LEAD_SELECTION_MAX_ROWS = 250;
 const GOOGLE_WEBHOOK_URL =
   "https://script.google.com/macros/s/AKfycbxWyhM9FG7Jwd9iri4ppb0699ohLRGHMpdXFFp047B2FabnSUUzBEv0k7Vw-t0MA-3xpQ/exec";
-const LOCAL_DB_SYNC_URL = "http://127.0.0.1:8787/api/leads/sync";
-const LOCAL_DB_IMPORT_URL = "http://127.0.0.1:8787/api/leads/import";
-const LOCAL_DB_LEAD_BASE_URL = "http://127.0.0.1:8787/api/leads";
-const LEAD_OPEN_LEASE_URL = "http://127.0.0.1:8787/api/leads";
-const LOCAL_DB_CARRIER_CONFIG_URL = "http://127.0.0.1:8787/api/carrier-config";
-const LOCAL_DB_CALENDAR_SCHEDULE_URL = "http://127.0.0.1:8787/api/calendar/schedule";
-const LOCAL_DB_CALENDAR_TODAY_URL = "http://127.0.0.1:8787/api/calendar/today";
-const LOCAL_DB_CALENDAR_WEEK_URL = "http://127.0.0.1:8787/api/calendar/week";
-const LOCAL_DB_PURGE_TEST_DATA_URL = "http://127.0.0.1:8787/api/admin/purge-test-data";
+const API_ORIGIN = `${window.location.protocol}//${window.location.hostname}:8787`;
+const LOCAL_DB_SYNC_URL = `${API_ORIGIN}/api/leads/sync`;
+const LOCAL_DB_IMPORT_URL = `${API_ORIGIN}/api/leads/import`;
+const LOCAL_DB_LEAD_BASE_URL = `${API_ORIGIN}/api/leads`;
+const LEAD_OPEN_LEASE_URL = `${API_ORIGIN}/api/leads`;
+const LOCAL_DB_CARRIER_CONFIG_URL = `${API_ORIGIN}/api/carrier-config`;
+const LOCAL_DB_CALENDAR_SCHEDULE_URL = `${API_ORIGIN}/api/calendar/schedule`;
+const LOCAL_DB_CALENDAR_TODAY_URL = `${API_ORIGIN}/api/calendar/today`;
+const LOCAL_DB_CALENDAR_WEEK_URL = `${API_ORIGIN}/api/calendar/week`;
+const LOCAL_DB_PURGE_TEST_DATA_URL = `${API_ORIGIN}/api/admin/purge-test-data`;
+const LOCAL_DB_CONTENT_POSTS_URL = `${API_ORIGIN}/api/content/posts`;
+const LOCAL_DB_CONTENT_POSTS_IMPORT_URL = `${API_ORIGIN}/api/content/posts/import`;
+const LOCAL_DB_CONTENT_POSTS_IMPORT_BUFFER_CURRENT_URL = `${API_ORIGIN}/api/content/posts/import-buffer-current`;
+const LOCAL_DB_CONTENT_PUBLISH_RUN_URL = `${API_ORIGIN}/api/content/publish/run`;
+const LOCAL_DB_CONTENT_PUBLISH_JOBS_URL = `${API_ORIGIN}/api/content/publish/jobs`;
 const GOOGLE_CALENDAR_EMBED_SRC = "hiltylena@gmail.com";
 const GOOGLE_CALENDAR_TZ = "America/New_York";
 const PIPELINE_STAGES = ["app_submitted", "underwriting", "approved", "issued", "paid"];
@@ -134,6 +173,40 @@ const DESK_DYNAMIC_SCRIPTS = {
   replace:
     "What is it about your current policy that is not working for you anymore? Is it the price or the coverage amount?",
 };
+const CONTENT_VIBE_PRESETS = [
+  {
+    label: "Future Protection",
+    text: "The best thing you can do to secure your future is protect your income before life gets expensive.",
+  },
+  {
+    label: "Life Insurance Myths",
+    text: "5 myths about life insurance that cost families money:\n1) It's too expensive\n2) Work coverage is enough\n3) I'm too healthy to need it\n4) I'll buy it later\n5) Policies are confusing on purpose",
+  },
+  {
+    label: "Wait Cost",
+    text: "Waiting to get covered is usually the most expensive option. Health and age do not move in your favor.",
+  },
+  {
+    label: "Work Coverage Gap",
+    text: "If your life insurance is only through work, ask this: what happens to coverage if your job changes tomorrow?",
+  },
+  {
+    label: "Parents Angle",
+    text: "If someone depends on your income, life insurance is not optional. It is a love plan with math behind it.",
+  },
+  {
+    label: "Term vs Whole",
+    text: "Term vs Whole in plain English: term protects for a period, whole adds lifelong structure. The right choice depends on your goal and timeline.",
+  },
+  {
+    label: "Policy Checkup CTA",
+    text: "Comment CHECKLIST and I will send you a free 5-minute policy checkup guide.",
+  },
+  {
+    label: "DM CTA",
+    text: "DM FUTURE and I will help you map a simple protection plan with no pressure and no jargon.",
+  },
+];
 const DESK_DISCOVERY_FIELD_IDS = new Set([
   "workflowGoal",
   "workflowAge",
@@ -197,6 +270,7 @@ const opsCharts = {
   pipeline: null,
   carrier: null,
   queue: null,
+  contentPillar: null,
 };
 
 function ymd(date) {
@@ -3929,6 +4003,7 @@ function setActiveTab(tab) {
     campaign: document.getElementById("campaignTabPanel"),
     calendar: document.getElementById("calendarTabPanel"),
     pipeline: document.getElementById("pipelineTabPanel"),
+    contentstudio: document.getElementById("contentStudioTabPanel"),
   };
 
   if (!Object.prototype.hasOwnProperty.call(panels, normalizedTab)) {
@@ -3959,6 +4034,9 @@ function setActiveTab(tab) {
 
   if (normalizedTab === "dashboard" || normalizedTab === "calendar") {
     setGoogleCalendarEmbeds();
+  }
+  if (normalizedTab === "contentstudio") {
+    loadContentStudioData().catch(() => {});
   }
 }
 
@@ -4222,6 +4300,1607 @@ function buildSelectedLeadBrief() {
     `Evidence: ${row["Source Evidence"] || "-"}`,
     `Operator note: ${leadState.ownerNote || "-"}`,
   ].join("\n");
+}
+
+function setContentStudioStatus(message) {
+  const el = document.getElementById("contentStudioStatus");
+  if (el) el.textContent = String(message || "");
+}
+
+async function apiFetch(input, init = {}) {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    const asText = String(input || "");
+    if (!asText.includes(":8787")) throw error;
+    const variants = [];
+    if (asText.includes("127.0.0.1")) variants.push(asText.replace("127.0.0.1", "localhost"));
+    if (asText.includes("localhost")) variants.push(asText.replace("localhost", "127.0.0.1"));
+    for (const candidate of variants) {
+      try {
+        return await fetch(candidate, init);
+      } catch {
+        // try next variant
+      }
+    }
+    throw error;
+  }
+}
+
+function readContentEditorValues() {
+  return {
+    post_id: String(document.getElementById("contentEditPostId")?.value || "").trim(),
+    status: String(document.getElementById("contentEditStatus")?.value || "").trim(),
+    post_date: String(document.getElementById("contentEditDate")?.value || "").trim(),
+    post_time: String(document.getElementById("contentEditTime")?.value || "").trim(),
+    platforms: String(document.getElementById("contentEditPlatforms")?.value || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean),
+    hook: String(document.getElementById("contentEditHook")?.value || "").trim(),
+    caption: String(document.getElementById("contentEditCaption")?.value || "").trim(),
+    reel_script: String(document.getElementById("contentEditReelScript")?.value || "").trim(),
+    visual_prompt: String(document.getElementById("contentEditVisualPrompt")?.value || "").trim(),
+    canva_design_link: String(document.getElementById("contentEditCanvaLink")?.value || "").trim(),
+    cta: String(document.getElementById("contentEditCta")?.value || "").trim(),
+    hashtags_text: String(document.getElementById("contentEditHashtags")?.value || "").trim(),
+  };
+}
+
+function formatPreviewCaptionForPlatform(current, platform) {
+  const PLATFORM_PREVIEW_RULES = {
+    instagram: { label: "Instagram", maxChars: 2200, maxHashtags: 30 },
+    tiktok: { label: "TikTok", maxChars: 300, maxHashtags: 6 },
+    facebook: { label: "Facebook", maxChars: 63206, maxHashtags: 4 },
+  };
+  const rule = PLATFORM_PREVIEW_RULES[platform] || PLATFORM_PREVIEW_RULES.instagram;
+  const platformLabel = platform === "tiktok" ? "TikTok" : platform === "facebook" ? "Facebook" : "Instagram";
+  const normalizeHashtag = (tag) => {
+    const cleaned = String(tag || "")
+      .trim()
+      .replace(/^#+/, "")
+      .replace(/[^A-Za-z0-9_]/g, "");
+    return cleaned ? `#${cleaned}` : "";
+  };
+  const rawTags = String(current.hashtags_text || "")
+    .split(/\s+/)
+    .map((tag) => normalizeHashtag(tag))
+    .filter(Boolean);
+  const limitedTags = rawTags.slice(0, rule.maxHashtags);
+  const bodyBlocks = [];
+  if (current.hook) bodyBlocks.push(current.hook);
+  if (current.caption) bodyBlocks.push(current.caption);
+  if (current.cta) bodyBlocks.push(current.cta);
+  let textBody = bodyBlocks.filter(Boolean).join("\n\n").trim();
+  let truncated = false;
+  if (textBody.length > rule.maxChars) {
+    truncated = true;
+    textBody = `${textBody.slice(0, Math.max(0, rule.maxChars - 1)).trimEnd()}…`;
+  }
+  const tagsLine = limitedTags.join(" ");
+  let text = textBody;
+  if (tagsLine) {
+    const withTags = text ? `${text}\n\n${tagsLine}` : tagsLine;
+    if (withTags.length <= rule.maxChars) {
+      text = withTags;
+    } else {
+      let fittingTags = [];
+      limitedTags.forEach((tag) => {
+        const next = [...fittingTags, tag].join(" ");
+        const candidate = text ? `${text}\n\n${next}` : next;
+        if (candidate.length <= rule.maxChars) fittingTags.push(tag);
+      });
+      if (fittingTags.length) {
+        text = text ? `${text}\n\n${fittingTags.join(" ")}` : fittingTags.join(" ");
+      }
+    }
+  }
+  const charCount = text.length;
+  return {
+    platformLabel: rule.label || platformLabel,
+    text: text || "(No caption yet)",
+    charCount,
+    maxChars: rule.maxChars,
+    maxHashtags: rule.maxHashtags,
+    truncated,
+  };
+}
+
+function renderContentPreview() {
+  const metaEl = document.getElementById("contentPreviewMeta");
+  const hookEl = document.getElementById("contentPreviewHook");
+  const captionEl = document.getElementById("contentPreviewCaption");
+  const scriptEl = document.getElementById("contentPreviewScript");
+  const visualEl = document.getElementById("contentPreviewVisual");
+  const scoreEl = document.getElementById("contentQualityScore");
+  const notesEl = document.getElementById("contentQualityNotes");
+  if (!metaEl || !hookEl || !captionEl || !scriptEl || !visualEl || !scoreEl || !notesEl) return;
+  const current = readContentEditorValues();
+  if (!current.post_id) {
+    metaEl.textContent = "No post selected.";
+    hookEl.textContent = "-";
+    captionEl.textContent = "-";
+    scriptEl.textContent = "-";
+    visualEl.textContent = "-";
+    scoreEl.textContent = "-";
+    notesEl.textContent = "-";
+    const platformLabelEl = document.getElementById("contentPreviewPlatformLabel");
+    if (platformLabelEl) platformLabelEl.textContent = "Platform Preview: Instagram";
+    return;
+  }
+  const platform = String(state.ui.contentPreviewPlatform || "instagram");
+  const preview = formatPreviewCaptionForPlatform(current, platform);
+  metaEl.textContent = `${current.post_id} • ${current.status || "draft"} • ${current.post_date || "-"} ${current.post_time || "-"} • ${current.platforms.join(", ") || "-"}`;
+  const platformLabelEl = document.getElementById("contentPreviewPlatformLabel");
+  if (platformLabelEl) {
+    const truncation = preview.truncated ? " • trimmed to fit" : "";
+    platformLabelEl.textContent = `Platform Preview: ${preview.platformLabel} • ${preview.charCount}/${preview.maxChars} chars • max ${preview.maxHashtags} hashtags${truncation}`;
+  }
+  hookEl.textContent = current.hook || "(No hook yet)";
+  captionEl.textContent = preview.text;
+  scriptEl.textContent = current.reel_script || "(No reel script yet)";
+  visualEl.textContent = current.visual_prompt || "(No visual prompt yet)";
+  const review = evaluateContentPostQuality(current);
+  scoreEl.textContent = `${review.score}/100 (${review.label})`;
+  notesEl.textContent = review.notes.join("\n") || "No review notes.";
+}
+
+function openSelectedContentAsset() {
+  const asset = String(document.getElementById("contentEditAssetFile")?.value || "").trim();
+  if (!asset) {
+    setContentStudioStatus("No final asset URL set for selected post.");
+    return;
+  }
+  window.open(asset, "_blank", "noopener,noreferrer");
+}
+
+function openSelectedCanvaDesign() {
+  const url = String(document.getElementById("contentEditCanvaLink")?.value || "").trim();
+  if (!url) {
+    setContentStudioStatus("No Canva design link set for selected post.");
+    return;
+  }
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+async function copyPreviewCaptionToClipboard() {
+  const text = String(document.getElementById("contentPreviewCaption")?.textContent || "").trim();
+  if (!text || text === "-") {
+    setContentStudioStatus("No caption preview to copy.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(text);
+    setContentStudioStatus("Caption copied to clipboard.");
+  } catch {
+    setContentStudioStatus("Could not copy caption (clipboard permission blocked).");
+  }
+}
+
+function buildCanvaHandoffText(post) {
+  const current = post || getSelectedContentPost();
+  if (!current) return "";
+  const platforms = Array.isArray(current.platforms) ? current.platforms.join(", ") : String(current.platforms || "");
+  const safe = (value, fallback = "(none yet)") => String(value || "").trim() || fallback;
+  return [
+    `Post ID: ${safe(current.post_id || current.id)}`,
+    `Platform(s): ${safe(platforms)}`,
+    `Topic: ${safe(current.topic)}`,
+    `Hook: ${safe(current.hook)}`,
+    `Caption:`,
+    safe(current.caption),
+    ``,
+    `CTA: ${safe(current.cta)}`,
+    `Canva design link: ${safe(current.canva_design_link, "(add when available)")}`,
+    `Reel / motion notes:`,
+    safe(current.reel_script),
+    ``,
+    `Canva layout notes:`,
+    safe(current.visual_prompt, "Use a calm editorial layout. Keep the image text-free until Canva adds the final typography."),
+    ``,
+    `Design rules:`,
+    `- Imagen provides text-free visuals only`,
+    `- Canva owns all text placement and layout changes`,
+    `- Keep palette restrained: white, black, beige, brown, grey`,
+    `- Keep layouts simple, editorial, and mobile-readable`,
+    `- Export final asset and paste the public URL back into Content Studio`,
+  ].join("\n");
+}
+
+async function copyCanvaHandoffToClipboard() {
+  const post = getSelectedContentPost();
+  if (!post) {
+    setContentStudioStatus("Select a post first.");
+    return;
+  }
+  try {
+    await navigator.clipboard.writeText(buildCanvaHandoffText({
+      ...post,
+      hook: String(document.getElementById("contentEditHook")?.value || post.hook || "").trim(),
+      caption: String(document.getElementById("contentEditCaption")?.value || post.caption || "").trim(),
+      reel_script: String(document.getElementById("contentEditReelScript")?.value || post.reel_script || "").trim(),
+      visual_prompt: String(document.getElementById("contentEditVisualPrompt")?.value || post.visual_prompt || "").trim(),
+      canva_design_link: String(document.getElementById("contentEditCanvaLink")?.value || post.canva_design_link || "").trim(),
+      cta: String(document.getElementById("contentEditCta")?.value || post.cta || "").trim(),
+    }));
+    setContentStudioStatus("Canva handoff copied to clipboard.");
+  } catch {
+    setContentStudioStatus("Could not copy Canva handoff (clipboard permission blocked).");
+  }
+}
+
+function hasPlaceholderAssetFile() {
+  const assetFile = String(document.getElementById("contentEditAssetFile")?.value || "").trim();
+  return /FILE_ID/i.test(assetFile);
+}
+
+function hasRealAssetFile() {
+  const assetFile = String(document.getElementById("contentEditAssetFile")?.value || "").trim();
+  return Boolean(assetFile) && /^https?:\/\//i.test(assetFile) && !hasPlaceholderAssetFile();
+}
+
+function applyContentAssetPlaceholderGuard() {
+  const blocked = !hasRealAssetFile();
+  const tooltip = "Add the final public asset URL from Canva before approval or publishing";
+  [
+    "contentApproveBtn",
+    "contentScheduleBtn",
+    "contentStepApproveBtn",
+    "contentStepScheduleBtn",
+    "contentStepPublishBtn",
+    "contentRunPublishTopBtn",
+  ].forEach((id) => {
+    const button = document.getElementById(id);
+    if (!button) return;
+    button.setAttribute("aria-disabled", blocked ? "true" : "false");
+    if (blocked) {
+      button.title = tooltip;
+      button.setAttribute("data-disabled-reason", tooltip);
+    } else {
+      button.disabled = false;
+      button.removeAttribute("title");
+      button.removeAttribute("data-disabled-reason");
+    }
+  });
+}
+
+function renderVibeLibrary() {
+  const list = document.getElementById("vibeLibraryList");
+  if (!list) return;
+  list.innerHTML = CONTENT_VIBE_PRESETS.map(
+    (preset, index) => `
+      <article class="vibe-card">
+        <h4>${escapeHtml(preset.label)}</h4>
+        <p class="vibe-text">${escapeHtml(preset.text)}</p>
+        <button class="ghost-button slim" type="button" data-vibe-copy="${index}">[Copy]</button>
+      </article>
+    `,
+  ).join("");
+}
+
+async function copyVibePresetToClipboard(index) {
+  const preset = CONTENT_VIBE_PRESETS[index];
+  if (!preset) return;
+  try {
+    await navigator.clipboard.writeText(String(preset.text || "").trim());
+    setContentStudioStatus(`Copied "${preset.label}" preset.`);
+  } catch {
+    setContentStudioStatus("Could not copy vibe preset (clipboard permission blocked).");
+  }
+}
+
+function evaluateContentPostQuality(current) {
+  const notes = [];
+  let score = 50;
+  const hook = String(current.hook || "").trim();
+  const caption = String(current.caption || "").trim();
+  const cta = String(current.cta || "").trim();
+  const hashtags = String(current.hashtags_text || "").trim();
+  if (hook.length >= 35 && hook.length <= 90) {
+    score += 12;
+  } else {
+    notes.push("Hook length is outside the ideal 35-90 character range.");
+  }
+  if (/\b(#1|mistake|wrong|before|stop|truth|myth|save)\b/i.test(hook)) {
+    score += 10;
+  } else {
+    notes.push("Hook can be stronger with a clear pattern-break word (mistake, truth, before, stop).");
+  }
+  if (/\?/g.test(hook)) {
+    score += 6;
+  } else {
+    notes.push("Consider a question-style hook to improve early engagement.");
+  }
+  if (caption.length >= 140) {
+    score += 8;
+  } else {
+    notes.push("Caption is short; add 1-2 value bullets for more saves and shares.");
+  }
+  if (/insuredbylena\.com/i.test(cta) || /insuredbylena\.com/i.test(caption)) {
+    score += 8;
+  } else {
+    notes.push("Include insuredbylena.com in CTA or caption.");
+  }
+  if (/guide/i.test(cta) || /comment\s+\"?guide\"?/i.test(caption)) {
+    score += 10;
+  } else {
+    notes.push('Add comment prompt: Comment "GUIDE" for checklist DM.');
+  }
+  const hashtagCount = hashtags ? hashtags.split(/\s+/).filter(Boolean).length : 0;
+  if (hashtagCount >= 4 && hashtagCount <= 12) {
+    score += 6;
+  } else {
+    notes.push("Use 4-12 focused hashtags.");
+  }
+  if (current.platforms.length >= 2) {
+    score += 5;
+  } else {
+    notes.push("Cross-post to at least 2 platforms early on.");
+  }
+  score = Math.max(0, Math.min(100, score));
+  const label = score >= 85 ? "Strong" : score >= 70 ? "Good" : score >= 55 ? "Fair" : "Needs work";
+  if (!notes.length) notes.push("Ready for approval and scheduling.");
+  return { score, label, notes };
+}
+
+function getContentApprovalValidationIssues() {
+  const hook = String(document.getElementById("contentEditHook")?.value || "").trim();
+  const caption = String(document.getElementById("contentEditCaption")?.value || "").trim();
+  const cta = String(document.getElementById("contentEditCta")?.value || "").trim();
+  const combined = `${hook}\n${caption}\n${cta}`;
+  const issues = [];
+  if (!/insuredbylena\.com/i.test(combined)) {
+    issues.push("Include insuredbylena.com in the caption or CTA.");
+  }
+  if (!/comment\s+\"?guide\"?/i.test(combined) && !/\bguide\b/i.test(cta)) {
+    issues.push('Add a comment prompt: Comment "GUIDE" for DM checklist.');
+  }
+  const hasSavingsClaim =
+    /\$[\d,]+/i.test(combined) ||
+    /%\s*off/i.test(combined) ||
+    /\blower premium\b/i.test(combined) ||
+    /\brate change\b/i.test(combined) ||
+    /\bsaved?\s+\$[\d,]+/i.test(combined) ||
+    /\bqualify for lower/i.test(combined);
+  const hasDisclaimer = /\b(results vary|not guaranteed|depends on eligibility|based on underwriting)\b/i.test(combined);
+  if (hasSavingsClaim && !hasDisclaimer) {
+    issues.push("Savings or rate claims need a disclaimer (e.g., results vary based on eligibility/underwriting).");
+  }
+  return issues;
+}
+
+function generateGrowthHookIdeas(topic, existingHook) {
+  const cleanTopic = String(topic || "").trim() || "insurance";
+  const base = String(existingHook || "").trim() || cleanTopic;
+  return [
+    `Most people get this wrong about ${cleanTopic}.`,
+    `Before you buy ${cleanTopic}, read this first.`,
+    `The #1 mistake I see with ${cleanTopic}.`,
+    `If you only check one thing in ${cleanTopic}, check this.`,
+    `This ${cleanTopic} tip can save you expensive mistakes.`,
+    `What no one tells you about ${cleanTopic} until it is too late.`,
+    `Stop scrolling if your family depends on ${cleanTopic}.`,
+    `Quick reality check: ${base.replace(/[.!?]+$/, "")}.`,
+  ];
+}
+
+function getSelectedContentPost() {
+  const selectedId = String(state.ui.selectedContentPostId || "");
+  if (!selectedId) return null;
+  return state.contentPosts.find((post) => String(post.id) === selectedId) || null;
+}
+
+function getContentPublishFlowState() {
+  const post = getSelectedContentPost();
+  if (!post) {
+    return {
+      post: null,
+      currentStatus: "",
+      saved: false,
+      approved: false,
+      scheduled: false,
+      dueNow: false,
+      hasAsset: false,
+      issues: [],
+      nextStep: "Select a post",
+    };
+  }
+  const currentStatus = String(post.status || "").trim().toLowerCase();
+  const draftOverride = getContentDraftOverride(post.id);
+  const assetValue = String(document.getElementById("contentEditAssetFile")?.value || post.asset_filename || "").trim();
+  const scheduledValue = String(
+    document.getElementById("contentEditScheduledFor")?.value || draftOverride.scheduled_for || post.scheduled_for || "",
+  ).trim();
+  const saved = true;
+  const approved = currentStatus === "approved" || currentStatus === "scheduled" || currentStatus === "published";
+  const hasSchedule = Boolean(scheduledValue);
+  const scheduled = currentStatus === "scheduled" || currentStatus === "published" || hasSchedule;
+  const hasAsset = Boolean(assetValue) && /^https?:\/\//i.test(assetValue) && !/FILE_ID_/i.test(assetValue);
+  const dueNow = scheduledValue ? (() => {
+    try {
+      const candidate = new Date(scheduledValue);
+      return !Number.isNaN(candidate.getTime()) && candidate.getTime() <= Date.now();
+    } catch {
+      return false;
+    }
+  })() : currentStatus === "approved";
+  const issues = [];
+  if (!hasAsset) {
+    issues.push(assetValue ? `Final asset URL is invalid: ${assetValue}` : "Paste the final public Canva export URL in Final Asset URL.");
+  }
+  if (!approved) issues.push("Click Approve first.");
+  if (!hasSchedule) issues.push("Set Schedule At before sending this post to Buffer.");
+  let nextStep = "Run Publish";
+  if (!approved) nextStep = "Approve";
+  else if (!hasSchedule) nextStep = "Set Schedule At";
+  else if (!hasAsset) nextStep = "Paste final Canva asset URL";
+  return { post, currentStatus, saved, approved, scheduled, hasSchedule, dueNow, hasAsset, issues, nextStep };
+}
+
+function renderContentPublishGuide() {
+  try {
+  const summary = document.getElementById("contentPublishGuideSummary");
+  const checklist = document.getElementById("contentPublishChecklist");
+  if (!summary || !checklist) return;
+  const flow = getContentPublishFlowState();
+  if (!flow.post) {
+    summary.textContent = "Select a post to see the publish sequence.";
+    checklist.innerHTML = "";
+    return;
+  }
+  const steps = [
+    {
+      label: "Step 1",
+      title: "Save",
+      done: flow.saved,
+      active: !flow.approved,
+      note: "Update the post plan and save the latest copy/layout notes.",
+    },
+    {
+      label: "Step 2",
+      title: "Approve",
+      done: flow.approved,
+      active: flow.saved && !flow.approved,
+      note: flow.approved ? `Current status: ${flow.currentStatus}` : "Approve only after the Canva export URL is pasted back in.",
+    },
+    {
+      label: "Step 3",
+      title: "Schedule",
+      done: flow.hasSchedule,
+      active: flow.approved && !flow.hasSchedule,
+      note: flow.hasSchedule
+        ? "Schedule time saved. Buffer will use this time when you run publish."
+        : "Set Schedule At so Buffer knows when this post should publish.",
+    },
+    {
+      label: "Step 4",
+      title: "Run Publish",
+      done: flow.currentStatus === "published",
+      active: flow.approved && flow.hasSchedule && flow.hasAsset,
+      note: flow.hasAsset ? "Sends approved posts with saved schedule times to Buffer." : "Blocked until the final Canva asset URL is real.",
+    },
+  ];
+  summary.textContent = flow.issues.length
+    ? `Next step: ${flow.nextStep}. ${flow.issues.join(" ")}`
+    : `Ready: ${flow.post.post_id} has a final asset and can be published now.`;
+  checklist.innerHTML = steps
+    .map((step) => {
+      const stateClass = step.done ? "done" : step.active ? "active" : "pending";
+      return `
+        <div class="content-publish-step ${stateClass}">
+          <span class="content-publish-step-label">${escapeHtml(step.label)}</span>
+          <span class="content-publish-step-title">${escapeHtml(step.title)}</span>
+          <span class="content-publish-step-note">${escapeHtml(step.note)}</span>
+        </div>
+      `;
+    })
+    .join("");
+  } catch (error) {
+    console.error("Content publish guide render failed:", error);
+  }
+}
+
+function renderContentRequiredChecklist() {
+  const summary = document.getElementById("contentRequiredSummary");
+  const checklist = document.getElementById("contentRequiredChecklist");
+  if (!summary || !checklist) return;
+  const flow = getContentPublishFlowState();
+  if (!flow.post) {
+    summary.textContent = "Select a post to see exactly what is still needed before publish.";
+    checklist.innerHTML = "";
+    return;
+  }
+  const canvaValue = String(document.getElementById("contentEditCanvaLink")?.value || flow.post.canva_design_link || "").trim();
+  const assetValue = String(document.getElementById("contentEditAssetFile")?.value || flow.post.asset_filename || "").trim();
+  const scheduleValue = String(document.getElementById("contentEditScheduledFor")?.value || flow.post.scheduled_for || "").trim();
+  const items = [
+    {
+      label: "Canva design linked",
+      done: Boolean(canvaValue),
+      note: canvaValue ? "Design link saved for reopen and handoff." : "Paste the working Canva design link so revisions are easy to reopen.",
+    },
+    {
+      label: "Final asset URL ready",
+      done: flow.hasAsset,
+      note: flow.hasAsset ? "Public export URL is ready for approval and publishing." : "Paste the public Canva export URL, not a placeholder file ID.",
+    },
+    {
+      label: "Approved in studio",
+      done: flow.approved,
+      note: flow.approved ? `Status is ${flow.currentStatus}.` : "Save edits, then click Approve when the asset is real.",
+    },
+    {
+      label: "Scheduled to publish",
+      done: flow.hasSchedule,
+      note: flow.hasSchedule ? "Schedule time is saved and ready to send to Buffer." : (scheduleValue ? "Save or approve the post to keep this schedule time." : "Set Schedule At before sending this post to Buffer."),
+    },
+  ];
+  const remaining = items.filter((item) => !item.done).length;
+  summary.textContent = remaining
+    ? `${remaining} item${remaining === 1 ? "" : "s"} still blocking publish for ${flow.post.post_id}.`
+    : `${flow.post.post_id} is ready for publish.`;
+  checklist.innerHTML = items
+    .map(
+      (item) => `
+        <div class="content-required-item ${item.done ? "done" : "todo"}">
+          <strong>${escapeHtml(item.done ? `Done: ${item.label}` : `Needs attention: ${item.label}`)}</strong>
+          <span>${escapeHtml(item.note)}</span>
+        </div>
+      `,
+    )
+    .join("");
+}
+
+function getFilteredContentPosts() {
+  const search = String(state.ui.contentPostSearch || "").trim().toLowerCase();
+  const weekFilter = String(state.ui.contentPostWeekFilter || "").trim();
+  const platformFilter = String(state.ui.contentPostPlatformFilter || "").trim().toLowerCase();
+  const statusFilter = String(state.ui.contentPostStatusFilter || "").trim().toLowerCase();
+  return (state.contentPosts || []).filter((post) => {
+    if (weekFilter && String(post.week_number || "") !== weekFilter) return false;
+    if (platformFilter && !(post.platforms || []).some((p) => String(p || "").toLowerCase() === platformFilter)) return false;
+    if (statusFilter && String(post.status || "").toLowerCase() !== statusFilter) return false;
+    if (!search) return true;
+    const haystack = [
+      post.post_id,
+      post.topic,
+      post.hook,
+      post.caption,
+      (post.platforms || []).join(","),
+      post.post_date,
+      post.post_time,
+    ]
+      .map((value) => String(value || "").toLowerCase())
+      .join("\n");
+    return haystack.includes(search);
+  });
+}
+
+function populateContentQuickPick() {
+  const select = document.getElementById("contentQuickPick");
+  if (!select) return;
+  const posts = getFilteredContentPosts();
+  const selectedId = String(state.ui.selectedContentPostId || "");
+  if (!posts.length) {
+    select.innerHTML = '<option value="">No posts available. Refresh or import buffer-import.json.</option>';
+    select.value = "";
+    return;
+  }
+  select.innerHTML = posts
+    .map((post) => {
+      const label = [
+        `${post.post_id || `#${post.id}`} (#${post.id})`,
+        post.post_date || "-",
+        (post.platforms || []).join(","),
+        post.status || "draft",
+        post.topic || "",
+      ]
+        .filter(Boolean)
+        .join(" · ");
+      return `<option value="${escapeHtml(String(post.id))}">${escapeHtml(label)}</option>`;
+    })
+    .join("");
+  const hasSelected = posts.some((post) => String(post.id) === selectedId);
+  select.value = hasSelected ? selectedId : String(posts[0].id);
+  if (!hasSelected) {
+    state.ui.selectedContentPostId = String(posts[0].id);
+  }
+}
+
+function selectContentPost(postId) {
+  const normalized = String(postId || "").trim();
+  if (!normalized) return;
+  state.ui.selectedContentPostId = normalized;
+  renderContentPostTable();
+  renderContentEditor();
+  populateContentQuickPick();
+  loadContentRevisionsOnly().catch(() => {});
+  setContentStudioStatus(`Selected ${document.getElementById("contentEditPostId")?.value || "post"}.`);
+}
+
+function jumpToSelectedContentEditor() {
+  const editorPanel = document.getElementById("contentEditorPanel");
+  if (editorPanel instanceof HTMLElement) {
+    editorPanel.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  window.setTimeout(() => {
+    const topicInput = document.getElementById("contentEditTopic");
+    if (topicInput instanceof HTMLElement && typeof topicInput.focus === "function") {
+      topicInput.focus({ preventScroll: true });
+    }
+  }, 120);
+}
+
+window.__contentEditPost = (postId) => {
+  try {
+    selectContentPost(postId);
+    jumpToSelectedContentEditor();
+  } catch (error) {
+    console.error("Direct content edit failed:", error);
+    setContentStudioStatus(`Selection issue: ${String(error.message || error)}`);
+  }
+};
+
+window.__contentSelectPost = (postId) => {
+  try {
+    selectContentPost(postId);
+    jumpToSelectedContentEditor();
+  } catch (error) {
+    console.error("Direct content select failed:", error);
+    setContentStudioStatus(`Selection issue: ${String(error.message || error)}`);
+  }
+};
+
+window.__contentSaveDraft = () => {
+  saveSelectedContentDraft().catch((error) => {
+    console.error("Direct content save failed:", error);
+    setContentStudioStatus(String(error.message || error));
+  });
+};
+
+window.__contentApprove = () => {
+  runContentAction("approve").catch((error) => {
+    console.error("Direct content approve failed:", error);
+    setContentStudioStatus(String(error.message || error));
+  });
+};
+
+window.__contentSchedule = () => {
+  runContentAction("schedule").catch((error) => {
+    console.error("Direct content schedule failed:", error);
+    setContentStudioStatus(String(error.message || error));
+  });
+};
+
+window.__contentRunPublish = () => {
+  runContentPublish().catch((error) => {
+    console.error("Direct content publish failed:", error);
+    setContentStudioStatus(String(error.message || error));
+  });
+};
+
+function classifyContentPillar(post) {
+  const explicit = String(
+    post?.pillar || post?.content_pillar || post?.pillar_tag || post?.category || post?.tag || "",
+  )
+    .trim()
+    .toLowerCase();
+  if (/(educational|education|tip|myth|faq)/i.test(explicit)) return "Educational";
+  if (/(direct offer|offer|promo|promotion|quote)/i.test(explicit)) return "Direct Offer";
+
+  const combined = [
+    post?.topic,
+    post?.hook,
+    post?.caption,
+    post?.cta,
+    post?.post_type,
+    post?.status,
+  ]
+    .map((value) => String(value || "").toLowerCase())
+    .join(" ");
+
+  const directOfferSignals = [
+    /\bdm\b/,
+    /\bcomment\b/,
+    /\bquote\b/,
+    /\bfree (review|checkup|consult|quote)\b/,
+    /\bbook\b/,
+    /\bapply\b/,
+    /\bsign up\b/,
+    /\blink in bio\b/,
+    /\bvisit\b/,
+    /\bcall\b/,
+  ];
+  if (directOfferSignals.some((pattern) => pattern.test(combined))) return "Direct Offer";
+  return "Educational";
+}
+
+function renderContentPillarDistribution(posts) {
+  const canvas = document.getElementById("contentPillarDistributionChart");
+  const summaryEl = document.getElementById("contentPillarDistributionSummary");
+  if (!canvas || !summaryEl) return;
+
+  const total = posts.length;
+  const counts = posts.reduce(
+    (acc, post) => {
+      const pillar = classifyContentPillar(post);
+      if (pillar === "Direct Offer") acc.directOffer += 1;
+      else acc.educational += 1;
+      return acc;
+    },
+    { educational: 0, directOffer: 0 },
+  );
+
+  if (!total) {
+    summaryEl.textContent = "No filtered posts to analyze.";
+    if (opsCharts.contentPillar) {
+      opsCharts.contentPillar.destroy();
+      opsCharts.contentPillar = null;
+    }
+    return;
+  }
+
+  const eduPct = Math.round((counts.educational / total) * 100);
+  const offerPct = Math.round((counts.directOffer / total) * 100);
+  summaryEl.textContent = `Educational: ${eduPct}% (${counts.educational}/${total}) • Direct Offer: ${offerPct}% (${counts.directOffer}/${total})`;
+
+  if (typeof Chart === "undefined") return;
+  if (opsCharts.contentPillar) opsCharts.contentPillar.destroy();
+  opsCharts.contentPillar = new Chart(canvas, {
+    type: "pie",
+    data: {
+      labels: ["Educational", "Direct Offer"],
+      datasets: [
+        {
+          data: [counts.educational, counts.directOffer],
+          backgroundColor: ["rgba(113, 216, 255, 0.72)", "rgba(255, 138, 138, 0.72)"],
+          borderColor: ["rgba(113, 216, 255, 0.95)", "rgba(255, 138, 138, 0.95)"],
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "bottom",
+          labels: {
+            color: "#dbe9fb",
+            boxWidth: 10,
+            boxHeight: 10,
+            font: { size: 11 },
+          },
+        },
+      },
+    },
+  });
+}
+
+function renderContentPostTable() {
+  const tbody = document.getElementById("contentPostTable");
+  const selectAll = document.getElementById("contentSelectAll");
+  if (!tbody) return;
+  const filteredPosts = getFilteredContentPosts();
+  populateContentQuickPick();
+  renderContentPillarDistribution(filteredPosts);
+  if (!filteredPosts.length) {
+    const emptyMessage = state.contentPosts.length
+      ? "No posts match the current filters. Clear search or switch week, platform, or status."
+      : "No content posts loaded yet. Start the local API, then refresh or import buffer-import.json.";
+    tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
+    if (selectAll) selectAll.checked = false;
+    return;
+  }
+  const selectedIds = new Set((state.ui.contentSelectedPostIds || []).map((id) => String(id)));
+  tbody.innerHTML = filteredPosts
+    .map((post) => {
+      const isSelected = String(post.id) === String(state.ui.selectedContentPostId || "");
+      const isChecked = selectedIds.has(String(post.id));
+      const scheduleText = post.scheduled_for || `${post.post_date || "-"} ${post.post_time || "-"}`.trim();
+      const normalizedStatus = String(post.status || "draft").trim().toLowerCase();
+      const statusClassMap = {
+        draft: "content-status-draft",
+        scheduled: "content-status-scheduled",
+        published: "content-status-published",
+        failed: "content-status-failed",
+      };
+      const statusClass = statusClassMap[normalizedStatus] || "content-status-draft";
+      const statusLabel = String(post.status || "draft").trim() || "draft";
+      return `
+        <tr data-content-post-id="${escapeHtml(post.id)}" ${isSelected ? 'class="row-selected"' : ""} onclick="window.__contentSelectPost && window.__contentSelectPost('${escapeHtml(String(post.id))}')">
+          <td><input type="checkbox" data-content-check="${escapeHtml(post.id)}" ${isChecked ? "checked" : ""} onclick="event.stopPropagation()" /></td>
+          <td>${escapeHtml(post.post_id || `#${post.id}`)}</td>
+          <td><span class="content-status-chip ${statusClass}">${escapeHtml(statusLabel)}</span></td>
+          <td>${escapeHtml(scheduleText || "-")}</td>
+          <td>${escapeHtml((post.platforms || []).join(", "))}</td>
+          <td>${escapeHtml(post.topic || "-")}</td>
+          <td><button class="ghost-button slim content-row-action" type="button" title="Edit ${escapeHtml(post.post_id || `#${post.id}`)}" data-content-edit="${escapeHtml(post.id)}" onclick="event.stopPropagation(); window.__contentEditPost && window.__contentEditPost('${escapeHtml(String(post.id))}')">Edit</button></td>
+        </tr>
+      `;
+    })
+    .join("");
+  if (selectAll) {
+    const allChecked = filteredPosts.length > 0 && filteredPosts.every((post) => selectedIds.has(String(post.id)));
+    selectAll.checked = allChecked;
+  }
+}
+
+function renderContentPublishJobs() {
+  const tbody = document.getElementById("contentPublishJobTable");
+  if (!tbody) return;
+  if (!state.contentPublishJobs.length) {
+    tbody.innerHTML = '<tr><td colspan="4" class="muted">No publish jobs yet.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = state.contentPublishJobs
+    .map(
+      (job) => `
+        <tr>
+          <td>${escapeHtml(job.run_at || "-")}</td>
+          <td>${escapeHtml(job.post_id || "-")}</td>
+          <td><span class="content-job-status content-job-status-${escapeHtml(job.status || "unknown")}">${escapeHtml(job.status || "-")}</span></td>
+          <td><span class="content-job-error">${escapeHtml(job.error_message || "-")}</span></td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderContentRevisions() {
+  const tbody = document.getElementById("contentRevisionTable");
+  if (!tbody) return;
+  if (!state.contentRevisions.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="muted">No revisions for selected post.</td></tr>';
+    return;
+  }
+  tbody.innerHTML = state.contentRevisions
+    .map(
+      (revision) => `
+        <tr>
+          <td>${escapeHtml(String(revision.revision_number || revision.id || "-"))}</td>
+          <td>${escapeHtml(revision.changed_by || "-")}</td>
+          <td>${escapeHtml(revision.change_note || "-")}</td>
+          <td>${escapeHtml(revision.created_at || "-")}</td>
+          <td><button class="ghost-button slim" type="button" data-content-restore="${escapeHtml(String(revision.id || ""))}">Restore</button></td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
+function renderContentEditor() {
+  const post = getSelectedContentPost();
+  const emptyState = document.getElementById("contentEditorEmptyState");
+  const assetHint = document.getElementById("contentAssetHint");
+  const canvaHint = document.getElementById("contentCanvaHint");
+  const setValue = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.value = value || "";
+  };
+  if (!post) {
+    setValue("contentEditPostId", "");
+    setValue("contentEditStatus", "");
+    setValue("contentEditDate", "");
+    setValue("contentEditTime", "");
+    setValue("contentEditPlatforms", "");
+    setValue("contentEditType", "");
+    setValue("contentEditTopic", "");
+    setValue("contentEditHook", "");
+    setValue("contentEditCaption", "");
+    setValue("contentEditReelScript", "");
+    setValue("contentEditVisualPrompt", "");
+    setValue("contentEditCanvaLink", "");
+    setValue("contentEditAssetFile", "");
+    setValue("contentEditCta", "");
+    setValue("contentEditHashtags", "");
+    setValue("contentEditScheduledFor", "");
+    setValue("contentHookIdeas", "");
+    if (emptyState) emptyState.textContent = "Pick a post from Quick Pick or the table to load its working fields here.";
+    if (assetHint) assetHint.textContent = "Add the final public export URL here before approval or publishing.";
+    if (canvaHint) canvaHint.textContent = "Add the Canva design link here so the next editor can reopen the working file fast.";
+    renderContentPreview();
+    renderContentPublishGuide();
+    renderContentRequiredChecklist();
+    applyContentAssetPlaceholderGuard();
+    return;
+  }
+  const draftOverride = getContentDraftOverride(post.id);
+  setValue("contentEditPostId", post.post_id || String(post.id));
+  setValue("contentEditStatus", post.status || "");
+  setValue("contentEditDate", post.post_date || "");
+  setValue("contentEditTime", post.post_time || "");
+  setValue("contentEditPlatforms", (post.platforms || []).join(","));
+  setValue("contentEditType", post.post_type || "");
+  setValue("contentEditTopic", post.topic || "");
+  setValue("contentEditHook", post.hook || "");
+  setValue("contentEditCaption", post.caption || "");
+  setValue("contentEditReelScript", post.reel_script || "");
+  setValue("contentEditVisualPrompt", post.visual_prompt || "");
+  setValue("contentEditCanvaLink", post.canva_design_link || "");
+  setValue("contentEditAssetFile", post.asset_filename || "");
+  setValue("contentEditCta", post.cta || "");
+  setValue("contentEditHashtags", post.hashtags_text || (post.hashtags || []).join(" "));
+  const normalizedSchedule = String(draftOverride.scheduled_for || post.scheduled_for || "").replace("Z", "").slice(0, 16);
+  setValue("contentEditScheduledFor", normalizedSchedule);
+  const hookIdeas = generateGrowthHookIdeas(post.topic || "", post.hook || "");
+  setValue("contentHookIdeas", hookIdeas.join("\n"));
+  const canvaValue = String(post.canva_design_link || "").trim();
+  const assetValue = String(post.asset_filename || "").trim();
+  if (emptyState) emptyState.textContent = `Editing ${post.post_id || `#${post.id}`}. Save the copy here, finish layout in Canva, then paste back the final asset URL.`;
+  if (assetHint) {
+    assetHint.textContent = assetValue
+      ? (/^https?:\/\//i.test(assetValue) && !/FILE_ID_/i.test(assetValue)
+        ? "Final asset URL looks publish-ready."
+        : "Current asset value still needs a real public URL before approval or publishing.")
+      : "Add the final public export URL here before approval or publishing.";
+  }
+  if (canvaHint) {
+    canvaHint.textContent = canvaValue
+      ? "Canva design link saved for quick reopen."
+      : "Add the Canva design link here so the next editor can reopen the working file fast.";
+  }
+  renderContentPreview();
+  renderContentPublishGuide();
+  renderContentRequiredChecklist();
+  applyContentAssetPlaceholderGuard();
+}
+
+async function fetchContentPosts() {
+  const response = await apiFetch(LOCAL_DB_CONTENT_POSTS_URL);
+  if (!response.ok) throw new Error(`Content posts unavailable (${response.status})`);
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.error || "Could not load content posts");
+  state.contentPosts = Array.isArray(data.items) ? data.items : [];
+  const validIds = new Set(state.contentPosts.map((post) => String(post.id)));
+  state.ui.contentSelectedPostIds = (state.ui.contentSelectedPostIds || []).filter((id) => validIds.has(String(id)));
+  const hasSelection = state.contentPosts.some(
+    (post) => String(post.id) === String(state.ui.selectedContentPostId || ""),
+  );
+  if ((!state.ui.selectedContentPostId || !hasSelection) && state.contentPosts.length) {
+    state.ui.selectedContentPostId = String(state.contentPosts[0].id);
+  }
+}
+
+async function fetchContentPublishJobs() {
+  const response = await apiFetch(`${LOCAL_DB_CONTENT_PUBLISH_JOBS_URL}?limit=30`);
+  if (!response.ok) throw new Error(`Publish jobs unavailable (${response.status})`);
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.error || "Could not load publish jobs");
+  state.contentPublishJobs = Array.isArray(data.items) ? data.items : [];
+}
+
+async function fetchContentRevisions() {
+  const post = getSelectedContentPost();
+  if (!post) {
+    state.contentRevisions = [];
+    return;
+  }
+  const response = await apiFetch(`${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}/revisions`);
+  if (!response.ok) throw new Error(`Revisions unavailable (${response.status})`);
+  const data = await response.json();
+  if (!data.ok) throw new Error(data.error || "Could not load revisions");
+  state.contentRevisions = Array.isArray(data.items) ? data.items : [];
+}
+
+async function loadContentStudioData(statusMessage = "") {
+  setContentStudioStatus("Loading...");
+  let postsError = "";
+  let jobsError = "";
+  try {
+    await fetchContentPosts();
+  } catch (error) {
+    postsError = String(error.message || error);
+    state.contentPosts = [];
+    state.ui.selectedContentPostId = "";
+  }
+  try {
+    await fetchContentPublishJobs();
+  } catch (error) {
+    jobsError = String(error.message || error);
+    state.contentPublishJobs = [];
+  }
+  renderContentPostTable();
+  renderContentEditor();
+  renderContentPublishJobs();
+  try {
+    await fetchContentRevisions();
+  } catch (error) {
+    state.contentRevisions = [];
+  }
+  renderContentRevisions();
+  if (postsError && jobsError) {
+    setContentStudioStatus(`Content load issue: ${postsError}; Jobs load issue: ${jobsError}`);
+    return;
+  }
+  if (postsError) {
+    setContentStudioStatus(`Content load issue: ${postsError}`);
+    return;
+  }
+  if (jobsError) {
+    setContentStudioStatus(`Loaded ${state.contentPosts.length} posts (jobs unavailable: ${jobsError})`);
+    return;
+  }
+  if (statusMessage) {
+    setContentStudioStatus(statusMessage);
+    return;
+  }
+  setContentStudioStatus(`Loaded ${state.contentPosts.length} posts`);
+}
+
+async function loadContentRevisionsOnly() {
+  try {
+    await fetchContentRevisions();
+    renderContentRevisions();
+  } catch (error) {
+    state.contentRevisions = [];
+    renderContentRevisions();
+    setContentStudioStatus(String(error.message || error));
+  }
+}
+
+async function saveSelectedContentDraft() {
+  const post = getSelectedContentPost();
+  if (!post) {
+    setContentStudioStatus("Select a post first.");
+    return;
+  }
+  setContentStudioStatus("Saving...");
+  const payload = {
+    actor: "editor",
+    post_date: String(document.getElementById("contentEditDate")?.value || "").trim(),
+    post_time: String(document.getElementById("contentEditTime")?.value || "").trim(),
+    scheduled_for: String(document.getElementById("contentEditScheduledFor")?.value || "").trim(),
+    platforms: String(document.getElementById("contentEditPlatforms")?.value || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean),
+    post_type: String(document.getElementById("contentEditType")?.value || "").trim(),
+    topic: String(document.getElementById("contentEditTopic")?.value || "").trim(),
+    hook: String(document.getElementById("contentEditHook")?.value || "").trim(),
+    caption: String(document.getElementById("contentEditCaption")?.value || "").trim(),
+    reel_script: String(document.getElementById("contentEditReelScript")?.value || "").trim(),
+    visual_prompt: String(document.getElementById("contentEditVisualPrompt")?.value || "").trim(),
+    canva_design_link: String(document.getElementById("contentEditCanvaLink")?.value || "").trim(),
+    asset_filename: String(document.getElementById("contentEditAssetFile")?.value || "").trim(),
+    cta: String(document.getElementById("contentEditCta")?.value || "").trim(),
+    hashtags_text: String(document.getElementById("contentEditHashtags")?.value || "").trim(),
+  };
+  try {
+    const response = await apiFetch(`${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `Save failed (${response.status})`);
+    clearContentDraftOverride(post.id);
+    await loadContentStudioData("Draft saved.");
+  } catch (error) {
+    setContentStudioStatus(String(error.message || error));
+  }
+}
+
+async function runContentAction(action) {
+  const post = getSelectedContentPost();
+  if (!post) {
+    setContentStudioStatus("Select a post first.");
+    return;
+  }
+  if (action === "approve" || action === "schedule") {
+    if (hasPlaceholderAssetFile()) {
+      setContentStudioStatus("Cannot run action: Update media link in media-links.csv first");
+      window.alert("This post is blocked.\n\nReason: the Final Asset URL still uses a placeholder FILE_ID value.\n\nFinish the visual in Canva and paste a real public asset URL first.");
+      return;
+    }
+    const issues = getContentApprovalValidationIssues();
+    if (issues.length) {
+      setContentStudioStatus(`Cannot ${action}: ${issues.join(" ")}`);
+      window.alert(`Cannot ${action} this post yet.\n\n${issues.join("\n")}`);
+      return;
+    }
+  }
+  const note = action === "request-changes" ? "Needs edits before approval" : "";
+  setContentStudioStatus(`Applying ${action}...`);
+  try {
+    const response = await apiFetch(
+      `${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}/${encodeURIComponent(action)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actor: action === "approve" ? "approver" : "editor",
+          note,
+          scheduled_for: String(document.getElementById("contentEditScheduledFor")?.value || "").trim(),
+        }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `Action failed (${response.status})`);
+    clearContentDraftOverride(post.id);
+    const actionLabelMap = {
+      approve: "Post approved. Schedule time saved.",
+      schedule: "Post scheduled.",
+      "request-changes": "Marked for changes.",
+      "submit-review": "Submitted for review.",
+    };
+    await loadContentStudioData(actionLabelMap[action] || `Post ${action} complete.`);
+  } catch (error) {
+    setContentStudioStatus(String(error.message || error));
+  }
+}
+
+async function runBulkContentAction(action) {
+  const selectedIds = Array.from(new Set((state.ui.contentSelectedPostIds || []).map((id) => String(id).trim()).filter(Boolean)));
+  if (!selectedIds.length) {
+    setContentStudioStatus("Select one or more posts first.");
+    return;
+  }
+  const actionLabel = action.replace("-", " ");
+  setContentStudioStatus(`Running bulk ${actionLabel} on ${selectedIds.length} posts...`);
+  let success = 0;
+  let failed = 0;
+  for (const postId of selectedIds) {
+    try {
+      const response = await apiFetch(
+        `${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(postId)}/${encodeURIComponent(action)}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            actor: action === "approve" || action === "schedule" ? "approver" : "editor",
+            note: action === "request-changes" ? "Bulk update: needs edits" : "",
+          }),
+        },
+      );
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        failed += 1;
+      } else {
+        success += 1;
+      }
+    } catch {
+      failed += 1;
+    }
+  }
+  await loadContentStudioData(`Bulk ${actionLabel} complete. Success: ${success}, Failed: ${failed}.`);
+}
+
+async function restoreContentRevision(revisionId) {
+  const post = getSelectedContentPost();
+  if (!post) {
+    setContentStudioStatus("Select a post first.");
+    return;
+  }
+  if (!revisionId) return;
+  setContentStudioStatus("Restoring revision...");
+  try {
+    const response = await apiFetch(
+      `${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}/restore`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actor: "editor",
+          revision_id: Number(revisionId),
+        }),
+      },
+    );
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `Restore failed (${response.status})`);
+    await loadContentStudioData("Revision restored.");
+  } catch (error) {
+    setContentStudioStatus(String(error.message || error));
+  }
+}
+
+async function runContentPublish() {
+  const flow = getContentPublishFlowState();
+  if (flow.post) {
+    if (!flow.approved || !flow.hasSchedule || !flow.hasAsset) {
+      const details = flow.issues.length ? `\n\n${flow.issues.join("\n")}` : "";
+      window.alert(`This post is not ready to publish yet.\n\nSelected: ${flow.post.post_id}\nNext step: ${flow.nextStep}${details}`);
+      return;
+    }
+    const confirmed = window.confirm(
+      `Run publish now?\n\nSelected post: ${flow.post.post_id}\nThis will send approved posts with saved schedule times to Buffer, not just the selected row.`,
+    );
+    if (!confirmed) return;
+  }
+  setContentStudioStatus("Triggering publish...");
+  try {
+    const response = await apiFetch(LOCAL_DB_CONTENT_PUBLISH_RUN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ limit: 25 }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `Publish failed (${response.status})`);
+    await loadContentStudioData(`Publish run complete (${Number(data.processed || 0)} processed).`);
+  } catch (error) {
+    setContentStudioStatus(String(error.message || error));
+  }
+}
+
+async function importContentFromJsonFile(file) {
+  if (!file) return;
+  setContentStudioStatus("Importing...");
+  try {
+    const raw = await file.text();
+    const parsed = JSON.parse(raw);
+    const rawPosts = Array.isArray(parsed) ? parsed : parsed?.posts;
+    const isBufferRow = (item) =>
+      Boolean(
+        item &&
+          typeof item === "object" &&
+          "day" in item &&
+          "time" in item &&
+          "platform" in item &&
+          "caption" in item &&
+          "media_url" in item,
+      );
+    const toContentPostsFromBufferRows = (rows) => {
+      const validRows = rows.filter((row) => isBufferRow(row));
+      const uniqueDates = [...new Set(validRows.map((row) => String(row.day || "").trim()).filter(Boolean))].sort();
+      const baseDate = uniqueDates.length ? new Date(`${uniqueDates[0]}T00:00:00`) : null;
+      const parseDate = (value) => new Date(`${String(value || "").trim()}T00:00:00`);
+      const dayDiff = (a, b) => Math.floor((a.getTime() - b.getTime()) / (24 * 60 * 60 * 1000));
+      const platformSlug = (platform) => {
+        const p = String(platform || "").trim().toLowerCase();
+        if (p === "instagram") return "ig";
+        if (p === "facebook") return "fb";
+        if (p === "tiktok") return "tt";
+        return p.slice(0, 2) || "na";
+      };
+      const removeHashtagOnlyLines = (caption) => {
+        const lines = String(caption || "").split(/\r?\n/);
+        return lines
+          .filter((line) => {
+            const trimmed = line.trim();
+            if (!trimmed) return true;
+            const parts = trimmed.split(/\s+/).filter(Boolean);
+            if (!parts.length) return true;
+            const allTags = parts.every((part) => /^#[A-Za-z0-9_]+$/.test(part));
+            return !allTags;
+          })
+          .join("\n")
+          .trim();
+      };
+      const hashtagsText = (caption) => (String(caption || "").match(/#[A-Za-z0-9_]+/g) || []).join(" ");
+
+      return validRows.map((row) => {
+        const postDate = String(row.day || "").trim();
+        const platform = String(row.platform || "").trim();
+        let ordinalDay = 1;
+        if (baseDate && postDate) {
+          ordinalDay = dayDiff(parseDate(postDate), baseDate) + 1;
+          if (ordinalDay < 1) ordinalDay = 1;
+        }
+        const weekNumberLocal = Math.floor((ordinalDay - 1) / 7) + 1;
+        const dayInWeek = ((ordinalDay - 1) % 7) + 1;
+        const captionRaw = String(row.caption || "").trim();
+        const caption = removeHashtagOnlyLines(captionRaw);
+        const hook = caption.split(/\r?\n/).find((line) => line.trim()) || "";
+
+        return {
+          post_id: `W${weekNumberLocal}D${dayInWeek}-${platformSlug(platform)}`,
+          week_number: weekNumberLocal,
+          day: dayInWeek,
+          post_date: postDate,
+          post_time: String(row.time || "").trim() || "09:00",
+          platforms: [String(platform || "").toLowerCase()],
+          post_type: String(platform || "").toLowerCase() === "tiktok" ? "reel" : "social",
+          topic: hook.slice(0, 90),
+          hook: hook.slice(0, 140),
+          caption,
+          reel_script: "",
+          visual_prompt: "",
+          asset_filename: String(row.media_url || "").trim(),
+          cta: "Visit insuredbylena.com for a 100% free quote comparison. Comment GUIDE and I'll DM you the 2026 Insurance Planning Checklist.",
+          hashtags_text: hashtagsText(captionRaw),
+          status: "draft",
+        };
+      });
+    };
+    const posts = Array.isArray(rawPosts) && rawPosts.length && isBufferRow(rawPosts[0])
+      ? toContentPostsFromBufferRows(rawPosts)
+      : rawPosts;
+    if (!Array.isArray(posts) || !posts.length) {
+      throw new Error("JSON file must contain an array of posts.");
+    }
+    const weekMatch = String(file.name || "").match(/WEEK(\d+)/i);
+    const weekNumber = weekMatch ? Number(weekMatch[1]) : 0;
+    const response = await apiFetch(LOCAL_DB_CONTENT_POSTS_IMPORT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        week_number: Number.isFinite(weekNumber) ? weekNumber : 0,
+        source_file: file.name || "",
+        actor: "editor",
+        posts,
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `Import failed (${response.status})`);
+    await loadContentStudioData(`Imported ${Number(data.imported || 0)} new, updated ${Number(data.updated || 0)}.`);
+  } catch (error) {
+    setContentStudioStatus(String(error.message || error));
+  }
+}
+
+async function importContentFromCurrentBufferFile() {
+  setContentStudioStatus("Importing current buffer-import.json...");
+  try {
+    const response = await apiFetch(LOCAL_DB_CONTENT_POSTS_IMPORT_BUFFER_CURRENT_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        actor: "automation",
+        source_file: "buffer-import.json",
+      }),
+    });
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || `Import failed (${response.status})`);
+    await loadContentStudioData(`Imported ${Number(data.imported || 0)} new, updated ${Number(data.updated || 0)} from buffer-import.json.`);
+  } catch (error) {
+    setContentStudioStatus(String(error.message || error));
+  }
+}
+
+function attachContentStudioHandlers() {
+  renderVibeLibrary();
+  document.getElementById("contentRefreshBtn")?.addEventListener("click", () => {
+    loadContentStudioData().catch(() => {});
+  });
+  document.getElementById("contentRetryApiBtn")?.addEventListener("click", () => {
+    loadContentStudioData().catch(() => {});
+  });
+  document.getElementById("contentImportBufferCurrentBtn")?.addEventListener("click", () => {
+    importContentFromCurrentBufferFile().catch(() => {});
+  });
+  document.getElementById("contentRefreshRevisionsBtn")?.addEventListener("click", () => {
+    loadContentRevisionsOnly().catch(() => {});
+  });
+  document.getElementById("contentBulkSubmitBtn")?.addEventListener("click", () => {
+    runBulkContentAction("submit-review").catch(() => {});
+  });
+  document.getElementById("contentBulkApproveBtn")?.addEventListener("click", () => {
+    runBulkContentAction("approve").catch(() => {});
+  });
+  document.getElementById("contentBulkScheduleBtn")?.addEventListener("click", () => {
+    runBulkContentAction("schedule").catch(() => {});
+  });
+  document.getElementById("contentSaveBtn")?.addEventListener("click", () => {
+    saveSelectedContentDraft().catch(() => {});
+  });
+  document.getElementById("contentSubmitReviewBtn")?.addEventListener("click", () => {
+    runContentAction("submit-review").catch(() => {});
+  });
+  document.getElementById("contentApproveBtn")?.addEventListener("click", () => {
+    runContentAction("approve").catch(() => {});
+  });
+  document.getElementById("contentRequestChangesBtn")?.addEventListener("click", () => {
+    runContentAction("request-changes").catch(() => {});
+  });
+  document.getElementById("contentScheduleBtn")?.addEventListener("click", () => {
+    runContentAction("schedule").catch(() => {});
+  });
+  document.getElementById("contentRunPublishBtn")?.addEventListener("click", () => {
+    runContentPublish().catch(() => {});
+  });
+  document.getElementById("contentRunPublishTopBtn")?.addEventListener("click", () => {
+    runContentPublish().catch(() => {});
+  });
+  document.getElementById("contentStepSaveBtn")?.addEventListener("click", () => {
+    saveSelectedContentDraft().catch(() => {});
+  });
+  document.getElementById("contentStepApproveBtn")?.addEventListener("click", () => {
+    runContentAction("approve").catch(() => {});
+  });
+  document.getElementById("contentStepScheduleBtn")?.addEventListener("click", () => {
+    runContentAction("schedule").catch(() => {});
+  });
+  document.getElementById("contentStepPublishBtn")?.addEventListener("click", () => {
+    runContentPublish().catch(() => {});
+  });
+  document.getElementById("contentCopyCanvaHandoffBtn")?.addEventListener("click", () => {
+    copyCanvaHandoffToClipboard().catch(() => {});
+  });
+  document.getElementById("contentPreviewCopyCanvaBtn")?.addEventListener("click", () => {
+    copyCanvaHandoffToClipboard().catch(() => {});
+  });
+  document.getElementById("contentOpenCanvaDesignBtn")?.addEventListener("click", () => {
+    openSelectedCanvaDesign();
+  });
+  document.getElementById("contentOpenAssetBtn")?.addEventListener("click", () => {
+    openSelectedContentAsset();
+  });
+  document.getElementById("contentPublishHelpBtn")?.addEventListener("click", () => {
+    window.alert(
+      "Publish sequence:\n\n1. Update copy and layout notes in Content Studio\n2. Copy Canva handoff and make the visual/text changes in Canva\n3. Paste the final exported asset URL back into Content Studio\n4. Approve\n5. Set Schedule At and click Schedule\n6. Run Publish\n\nRun Publish only processes posts that are approved or scheduled and already due.",
+    );
+  });
+  document.getElementById("contentImportJsonFile")?.addEventListener("change", async (event) => {
+    const input = event.target;
+    const file = input?.files?.[0];
+    await importContentFromJsonFile(file);
+    if (input) input.value = "";
+  });
+  [
+    "contentEditDate",
+    "contentEditTime",
+    "contentEditPlatforms",
+    "contentEditType",
+    "contentEditTopic",
+    "contentEditHook",
+    "contentEditCaption",
+    "contentEditReelScript",
+    "contentEditVisualPrompt",
+    "contentEditCanvaLink",
+    "contentEditAssetFile",
+    "contentEditCta",
+    "contentEditHashtags",
+    "contentEditScheduledFor",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", () => {
+      if (id === "contentEditScheduledFor") {
+        const postId = String(state.ui.selectedContentPostId || "").trim();
+        if (postId) {
+          setContentDraftOverride(postId, { scheduled_for: String(el.value || "").trim() });
+        }
+      }
+      renderContentPreview();
+      renderContentPublishGuide();
+      renderContentRequiredChecklist();
+      applyContentAssetPlaceholderGuard();
+    });
+    el.addEventListener("change", () => {
+      if (id === "contentEditScheduledFor") {
+        const postId = String(state.ui.selectedContentPostId || "").trim();
+        if (postId) {
+          setContentDraftOverride(postId, { scheduled_for: String(el.value || "").trim() });
+        }
+      }
+      renderContentPreview();
+      renderContentPublishGuide();
+      renderContentRequiredChecklist();
+      applyContentAssetPlaceholderGuard();
+    });
+  });
+  document.getElementById("contentGenerateHooksBtn")?.addEventListener("click", () => {
+    const topic = String(document.getElementById("contentEditTopic")?.value || "").trim();
+    const hook = String(document.getElementById("contentEditHook")?.value || "").trim();
+    const earlyGrowth = Boolean(document.getElementById("contentEarlyGrowthToggle")?.checked);
+    const ideas = generateGrowthHookIdeas(topic, hook);
+    const boosted = earlyGrowth ? ideas : ideas.slice(0, 3);
+    const area = document.getElementById("contentHookIdeas");
+    if (area) area.value = boosted.join("\n");
+    setContentStudioStatus(`Generated ${boosted.length} hook ideas.`);
+  });
+  document.getElementById("contentApplyHookBtn")?.addEventListener("click", () => {
+    const area = document.getElementById("contentHookIdeas");
+    const hookInput = document.getElementById("contentEditHook");
+    if (!area || !hookInput) return;
+    const top = String(area.value || "")
+      .split("\n")
+      .map((line) => line.trim())
+      .find(Boolean);
+    if (!top) {
+      setContentStudioStatus("Generate hook ideas first.");
+      return;
+    }
+    hookInput.value = top;
+    renderContentPreview();
+    renderContentPublishGuide();
+    setContentStudioStatus("Applied top hook suggestion.");
+  });
+  const setPreviewPlatform = (platform) => {
+    state.ui.contentPreviewPlatform = platform;
+    renderContentPreview();
+  };
+  document.getElementById("contentPreviewInstagramBtn")?.addEventListener("click", () => setPreviewPlatform("instagram"));
+  document.getElementById("contentPreviewTiktokBtn")?.addEventListener("click", () => setPreviewPlatform("tiktok"));
+  document.getElementById("contentPreviewFacebookBtn")?.addEventListener("click", () => setPreviewPlatform("facebook"));
+  document.getElementById("contentPreviewOpenAssetBtn")?.addEventListener("click", () => openSelectedContentAsset());
+  document.getElementById("contentPreviewCopyCaptionBtn")?.addEventListener("click", () => {
+    copyPreviewCaptionToClipboard().catch(() => {});
+  });
+  document.getElementById("contentSelectAll")?.addEventListener("change", (event) => {
+    const checked = Boolean(event.target?.checked);
+    const filteredPosts = getFilteredContentPosts();
+    state.ui.contentSelectedPostIds = checked ? filteredPosts.map((post) => String(post.id)) : [];
+    renderContentPostTable();
+  });
+  [
+    "contentPostSearch",
+    "contentPostWeekFilter",
+    "contentPostPlatformFilter",
+    "contentPostStatusFilter",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const handler = () => {
+      state.ui[id] = String(el.value || "");
+      renderContentPostTable();
+    };
+    el.addEventListener("input", handler);
+    el.addEventListener("change", handler);
+  });
+  document.getElementById("contentPostTable")?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const restoreBtn = target.closest("[data-content-restore]");
+    if (restoreBtn) {
+      const revisionId = restoreBtn.getAttribute("data-content-restore") || "";
+      restoreContentRevision(revisionId).catch(() => {});
+      return;
+    }
+    const check = target.closest("[data-content-check]");
+    if (check) {
+      const postId = String(check.getAttribute("data-content-check") || "");
+      const selected = new Set((state.ui.contentSelectedPostIds || []).map((id) => String(id)));
+      if (check.checked) selected.add(postId);
+      else selected.delete(postId);
+      state.ui.contentSelectedPostIds = Array.from(selected);
+      renderContentPostTable();
+      return;
+    }
+    const editButton = target.closest("[data-content-edit]");
+    if (editButton) {
+      event.preventDefault();
+      event.stopPropagation();
+      const selectedId = editButton.getAttribute("data-content-edit") || "";
+      if (!selectedId) return;
+      try {
+        selectContentPost(selectedId);
+        jumpToSelectedContentEditor();
+      } catch (error) {
+        console.error("Content post edit button failed:", error);
+        setContentStudioStatus(`Selection issue: ${String(error.message || error)}`);
+      }
+      return;
+    }
+    const button = target.closest("[data-content-select]");
+    const row = target.closest("[data-content-post-id]");
+    const selectedId = button?.dataset.contentSelect || row?.getAttribute("data-content-post-id") || "";
+    if (!selectedId) return;
+    try {
+      selectContentPost(selectedId);
+      jumpToSelectedContentEditor();
+    } catch (error) {
+      console.error("Content post selection failed:", error);
+      setContentStudioStatus(`Selection issue: ${String(error.message || error)}`);
+    }
+  });
+  document.getElementById("contentQuickPick")?.addEventListener("change", (event) => {
+    const value = String(event.target?.value || "").trim();
+    if (!value) return;
+    try {
+      selectContentPost(value);
+    } catch (error) {
+      console.error("Content quick pick failed:", error);
+      setContentStudioStatus(`Selection issue: ${String(error.message || error)}`);
+    }
+  });
+  document.getElementById("contentRevisionTable")?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const restoreBtn = target.closest("[data-content-restore]");
+    if (!restoreBtn) return;
+    const revisionId = restoreBtn.getAttribute("data-content-restore") || "";
+    restoreContentRevision(revisionId).catch(() => {});
+  });
+  document.getElementById("vibeLibraryList")?.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const button = target.closest("[data-vibe-copy]");
+    if (!button) return;
+    const index = Number(button.getAttribute("data-vibe-copy"));
+    if (!Number.isFinite(index)) return;
+    copyVibePresetToClipboard(index).catch(() => {});
+  });
 }
 
 function attachFilterHandlers() {
@@ -5959,6 +7638,7 @@ attachCallDeskHandlers();
 attachCarrierSettingsHandlers();
 attachPipelineHandlers();
 attachLeadSelectionSortHandlers();
+attachContentStudioHandlers();
 syncWorkflowControls();
 renderCallDeskBranching();
 renderWorkflowAdvisor();

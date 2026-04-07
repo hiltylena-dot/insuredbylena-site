@@ -211,6 +211,63 @@
         line-height: 1.2 !important;
         transform: none !important;
       }
+
+      #contentPostTable tr.row-selected {
+        outline: 2px solid rgba(37, 99, 235, 0.55);
+        background: rgba(37, 99, 235, 0.12);
+      }
+
+      #contentStudioTabPanel {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+
+      .vibe-library-list {
+        display: grid;
+        gap: 10px;
+      }
+
+      .vibe-card {
+        border: 1px solid rgba(117, 155, 194, 0.18);
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 10px;
+        padding: 10px;
+      }
+
+      .vibe-card h4 {
+        margin: 0 0 8px;
+        font-size: 0.88rem;
+      }
+
+      .vibe-text {
+        margin: 0 0 10px;
+        white-space: pre-wrap;
+        line-height: 1.35;
+      }
+
+      .pillar-distribution-card {
+        border: 1px solid rgba(117, 155, 194, 0.18);
+        background: rgba(255, 255, 255, 0.03);
+        border-radius: 10px;
+        padding: 10px;
+        margin-top: 8px;
+        margin-bottom: 8px;
+      }
+
+      .pillar-distribution-row {
+        display: grid;
+        grid-template-columns: minmax(160px, 220px) 1fr;
+        gap: 10px;
+        align-items: center;
+      }
+
+      @media (max-width: 900px) {
+        .pillar-distribution-row {
+          grid-template-columns: 1fr;
+        }
+      }
+
     </style>
   </head>
   <body>
@@ -225,6 +282,7 @@
             <button id="campaignTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="campaignTabPanel" data-tab="campaign">4. Campaign</button>
             <button id="calendarTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="calendarTabPanel" data-tab="calendar">5. Calendar</button>
             <button id="pipelineTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="pipelineTabPanel" data-tab="pipeline">6. Pipeline</button>
+            <button id="contentStudioTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="contentStudioTabPanel" data-tab="contentstudio">7. Content Studio</button>
           </div>
         </div>
         <div class="top-nav-right">
@@ -455,7 +513,7 @@
 
         <div id="leadSelectionTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="leadSelectionTabButton" hidden>
           <header class="hero"><div><p class="eyebrow">Lead Selection</p><h2>Select one lead and load into Call Desk</h2></div></header>
-          <section class="panel">
+          <section class="panel content-queue-section">
             <div class="panel-header compact"><div><p class="panel-label">Finder</p><h3>One-line rows</h3></div><div class="lead-select-header-actions"><div id="leadSelectSummary" class="table-summary"></div><button id="leadSelectLoadBtn" class="ghost-button slim" type="button" disabled>Load into Call Desk</button><span id="leadSelectStatus" class="table-summary" aria-live="polite">No lead selected.</span></div></div>
             <div class="lead-select-filters">
               <label><span>Search</span><input id="leadSelectSearch" type="text" /></label>
@@ -615,7 +673,7 @@
 
         <div id="campaignTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="campaignTabButton" hidden>
           <header class="hero"><div><p class="eyebrow">Campaign Builder</p><h2>Select leads and prepare outbound batch drafts</h2></div></header>
-          <section class="panel">
+          <section class="panel content-queue-section">
             <div class="panel-header compact"><div><p class="panel-label">Filters</p><h3>Targeting controls</h3></div><div id="campaignSummary" class="table-summary"></div></div>
             <div class="lead-select-filters">
               <label><span>Search</span><input id="campaignSearch" type="text" /></label>
@@ -654,7 +712,7 @@
             <div><p class="eyebrow">Calendar</p><h2>Google-first appointment control</h2></div>
             <div class="hero-badge"><span class="hero-badge-label">Source</span><strong>Openclaw GOG</strong></div>
           </header>
-          <section class="panel">
+          <section class="panel content-queue-section">
             <iframe
               id="calendarEmbedFrame"
               title="Openclaw Google Calendar"
@@ -693,6 +751,227 @@
           </section>
         </div>
 
+        <div id="contentStudioTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="contentStudioTabButton" hidden>
+          <header class="hero compact-hero"><div><p class="eyebrow">Content Studio</p><h2>Plan in studio, finish design in Canva, publish from Buffer</h2></div></header>
+          <section class="panel-grid content-review-section">
+            <article id="contentEditorPanel" class="panel">
+              <div class="panel-header compact"><div><p class="panel-label">Top Review</p><h3>Selected post editor</h3></div></div>
+              <p class="content-design-note">Content Studio owns copy, approvals, and scheduling. Imagen creates the text-free visual. Canva applies the final text, spacing, and layout. The final exported asset URL comes back here for publishing.</p>
+              <p id="contentEditorEmptyState" class="content-editor-empty">Pick a post from Quick Pick or the table to load its working fields here.</p>
+              <div class="lead-select-filters content-quick-pick-row">
+                <label style="grid-column: 1 / -1;"><span>Quick Pick</span><select id="contentQuickPick"></select></label>
+              </div>
+              <div class="lead-select-filters">
+                <label><span>Post ID</span><input id="contentEditPostId" type="text" disabled /></label>
+                <label><span>Status</span><input id="contentEditStatus" type="text" disabled /></label>
+                <label><span>Date</span><input id="contentEditDate" type="date" /></label>
+                <label><span>Time</span><input id="contentEditTime" type="time" /></label>
+              </div>
+              <div class="lead-select-filters">
+                <label><span>Platforms (comma-separated)</span><input id="contentEditPlatforms" type="text" placeholder="instagram,facebook" /></label>
+                <label><span>Post Type</span><input id="contentEditType" type="text" placeholder="social or reel" /></label>
+                <label><span>Topic</span><input id="contentEditTopic" type="text" placeholder="Main takeaway or angle" /></label>
+                <label><span>Hook</span><input id="contentEditHook" type="text" placeholder="First line people stop for" /></label>
+              </div>
+              <label><span>Caption</span><textarea id="contentEditCaption" rows="4" placeholder="Write the full caption and CTA here."></textarea></label>
+              <label><span>Reel Script / Motion Notes</span><textarea id="contentEditReelScript" rows="2" placeholder="Camera beats, motion notes, or voiceover lines."></textarea></label>
+              <label><span>Canva Layout Notes</span><textarea id="contentEditVisualPrompt" rows="2" placeholder="Headline placement, hierarchy, spacing, footer, and brand style notes."></textarea></label>
+              <p class="content-field-help">Use this for text hierarchy, placement, footer fixes, spacing, and style notes for Canva. Keep Imagen text-free.</p>
+              <div class="lead-select-filters">
+                <label><span>Final Asset URL</span><input id="contentEditAssetFile" type="url" placeholder="Paste the public Canva export URL that will actually publish." /></label>
+                <label><span>Canva Design Link</span><input id="contentEditCanvaLink" type="url" placeholder="Paste the working Canva design link for handoff and revisions." /></label>
+                <label><span>CTA</span><input id="contentEditCta" type="text" placeholder="Example: Comment GUIDE and I'll DM the checklist." /></label>
+                <label><span>Hashtags</span><input id="contentEditHashtags" type="text" placeholder="#insurance #lifeinsurance #medicare" /></label>
+                <label><span>Schedule At</span><input id="contentEditScheduledFor" type="datetime-local" /></label>
+              </div>
+              <div class="content-link-hints">
+                <p id="contentAssetHint" class="content-field-help">Add the final public export URL here before approval or publishing.</p>
+                <p id="contentCanvaHint" class="content-field-help">Add the Canva design link here so the next editor can reopen the working file fast.</p>
+              </div>
+              <div class="detail-actions content-action-bar">
+                <button id="contentSaveBtn" class="ghost-button slim" type="button" onclick="window.__contentSaveDraft && window.__contentSaveDraft()">Save Draft</button>
+                <button id="contentSubmitReviewBtn" class="ghost-button slim" type="button">Submit Review</button>
+                <button id="contentApproveBtn" class="ghost-button slim content-action-important" type="button" onclick="window.__contentApprove && window.__contentApprove()">Approve</button>
+                <button id="contentRequestChangesBtn" class="ghost-button slim" type="button">Request Changes</button>
+                <button id="contentScheduleBtn" class="ghost-button slim" type="button" onclick="window.__contentSchedule && window.__contentSchedule()">Schedule</button>
+                <button id="contentRunPublishTopBtn" class="ghost-button slim content-action-primary" type="button" onclick="window.__contentRunPublish && window.__contentRunPublish()">Run Publish</button>
+              </div>
+              <article class="content-required-panel" aria-label="Required before publish">
+                <div class="panel-header compact"><div><p class="panel-label">Required Before Publish</p><h3>Clear blockers for this post</h3></div></div>
+                <p id="contentRequiredSummary" class="table-summary">Select a post to see the publish blockers.</p>
+                <div id="contentRequiredChecklist" class="content-required-checklist"></div>
+              </article>
+              <article class="panel content-publish-guide">
+                <div class="panel-header compact">
+                  <div><p class="panel-label">Publish Flow</p><h3>Clear next step for this post</h3></div>
+                  <button id="contentPublishHelpBtn" class="ghost-button slim" type="button">How it works</button>
+                </div>
+                <p id="contentPublishGuideSummary" class="table-summary">Select a post to see the publish sequence.</p>
+                <div id="contentPublishChecklist" class="content-publish-checklist"></div>
+                <div class="detail-actions content-publish-step-actions">
+                  <button id="contentStepSaveBtn" class="ghost-button slim" type="button" onclick="window.__contentSaveDraft && window.__contentSaveDraft()">1. Save</button>
+                  <button id="contentStepApproveBtn" class="ghost-button slim content-action-important" type="button" onclick="window.__contentApprove && window.__contentApprove()">2. Approve</button>
+                  <button id="contentStepScheduleBtn" class="ghost-button slim" type="button" onclick="window.__contentSchedule && window.__contentSchedule()">3. Schedule</button>
+                  <button id="contentStepPublishBtn" class="ghost-button slim content-action-primary" type="button" onclick="window.__contentRunPublish && window.__contentRunPublish()">4. Run Publish</button>
+                </div>
+                <div class="detail-actions content-canva-actions">
+                  <button id="contentCopyCanvaHandoffBtn" class="ghost-button slim" type="button">Copy Canva Handoff</button>
+                  <button id="contentOpenCanvaDesignBtn" class="ghost-button slim" type="button">Open Canva Design</button>
+                  <button id="contentOpenAssetBtn" class="ghost-button slim" type="button">Open Final Asset</button>
+                </div>
+                <details class="content-quick-manual">
+                  <summary>Quick manual</summary>
+                  <div class="content-quick-manual-body">
+                    <p><strong>1. Pick a post:</strong> Use <strong>Quick Pick</strong> or the post list.</p>
+                    <p><strong>2. Edit the plan here:</strong> Update hook, caption, CTA, reel notes, and Canva layout notes.</p>
+                    <p><strong>3. Push design changes to Canva:</strong> Use <strong>Copy Canva Handoff</strong>, make the visual/text changes in Canva, and export the final asset there.</p>
+                    <p><strong>4. Paste back the exported asset:</strong> Put the final public file into <strong>Final Asset URL</strong>.</p>
+                    <p><strong>5. Approve + schedule:</strong> Click <strong>Approve</strong>, then set <strong>Schedule At</strong> and click <strong>Schedule</strong>.</p>
+                    <p><strong>6. Publish:</strong> Click <strong>Run Publish</strong>. It sends all due approved or scheduled posts.</p>
+                    <p><strong>If nothing happens:</strong> The post is usually still draft, scheduled for later, or missing a real public asset URL.</p>
+                  </div>
+                </details>
+              </article>
+              <div class="detail-actions">
+                <label><input id="contentEarlyGrowthToggle" type="checkbox" checked /> Early Growth Mode (0-follower attention hooks)</label>
+                <button id="contentGenerateHooksBtn" class="ghost-button slim" type="button">Generate Hook Ideas</button>
+                <button id="contentApplyHookBtn" class="ghost-button slim" type="button">Apply Top Hook</button>
+              </div>
+              <label><span>Hook Ideas</span><textarea id="contentHookIdeas" rows="2" readonly></textarea></label>
+              <article class="panel" style="margin-top:10px;">
+                <div class="panel-header compact"><div><p class="panel-label">Post Preview</p><h3>Copy, Canva handoff, and final asset check</h3></div></div>
+                <p id="contentPreviewMeta" class="table-summary">No post selected.</p>
+                <p><strong>Quality Score:</strong> <span id="contentQualityScore">-</span></p>
+                <div class="detail-actions">
+                  <button id="contentPreviewInstagramBtn" class="ghost-button slim" type="button">Instagram</button>
+                  <button id="contentPreviewTiktokBtn" class="ghost-button slim" type="button">TikTok</button>
+                  <button id="contentPreviewFacebookBtn" class="ghost-button slim" type="button">Facebook</button>
+                  <button id="contentPreviewOpenAssetBtn" class="ghost-button slim" type="button">Open Asset</button>
+                  <button id="contentPreviewCopyCaptionBtn" class="ghost-button slim" type="button">Copy Caption</button>
+                  <button id="contentPreviewCopyCanvaBtn" class="ghost-button slim" type="button">Copy Canva Handoff</button>
+                </div>
+                <p id="contentPreviewPlatformLabel" class="table-summary">Platform Preview: Instagram</p>
+                <p><strong>Hook:</strong> <span id="contentPreviewHook">-</span></p>
+                <p><strong>Caption:</strong></p>
+                <pre id="contentPreviewCaption" style="white-space:pre-wrap; line-height:1.35; background:#0f1720; padding:10px; border-radius:8px;">-</pre>
+                <p><strong>Reel Script:</strong></p>
+                <pre id="contentPreviewScript" style="white-space:pre-wrap; line-height:1.35; background:#0f1720; padding:10px; border-radius:8px;">-</pre>
+                <p><strong>Canva Layout Notes:</strong></p>
+                <pre id="contentPreviewVisual" style="white-space:pre-wrap; line-height:1.35; background:#0f1720; padding:10px; border-radius:8px;">-</pre>
+                <p><strong>Review Notes:</strong></p>
+                <pre id="contentQualityNotes" style="white-space:pre-wrap; line-height:1.35; background:#0f1720; padding:10px; border-radius:8px;">-</pre>
+              </article>
+            </article>
+            <article class="panel">
+              <div class="panel-header compact"><div><p class="panel-label">Top Review</p><h3>Publish jobs</h3></div></div>
+              <div class="table-wrap lead-select-table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Run</th><th>Post</th><th>Status</th><th>Error</th></tr>
+                  </thead>
+                  <tbody id="contentPublishJobTable"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-header compact">
+                <div><p class="panel-label">Revisions</p><h3>Selected post history</h3></div>
+                <button id="contentRefreshRevisionsBtn" class="ghost-button slim" type="button">Refresh</button>
+              </div>
+              <div class="table-wrap lead-select-table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Revision</th><th>Changed By</th><th>Note</th><th>At</th><th>Action</th></tr>
+                  </thead>
+                  <tbody id="contentRevisionTable"></tbody>
+                </table>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-header compact"><div><p class="panel-label">Content Aids</p><h3>Vibe Library</h3></div></div>
+              <p class="table-summary">Tap <strong>[Copy]</strong> to send a preset directly to your clipboard.</p>
+              <div id="vibeLibraryList" class="vibe-library-list"></div>
+            </article>
+          </section>
+
+          <section class="panel">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Post List</p><h3>Load weekly exports and select posts</h3></div>
+              <div class="detail-actions">
+                <span id="contentStudioStatus" class="table-summary" aria-live="polite">Ready</span>
+                <button id="contentRetryApiBtn" class="ghost-button slim" type="button">Retry API</button>
+              </div>
+            </div>
+            <div class="detail-actions">
+              <label class="file-button slim">Import JSON<input id="contentImportJsonFile" type="file" accept=".json,application/json" /></label>
+              <button id="contentImportBufferCurrentBtn" class="ghost-button slim" type="button">Import Current buffer-import.json</button>
+              <button id="contentRefreshBtn" class="ghost-button slim" type="button">Refresh</button>
+              <button id="contentBulkSubmitBtn" class="ghost-button slim" type="button">Bulk Submit Review</button>
+              <button id="contentBulkApproveBtn" class="ghost-button slim" type="button">Bulk Approve</button>
+              <button id="contentBulkScheduleBtn" class="ghost-button slim" type="button">Bulk Schedule</button>
+              <button id="contentRunPublishBtn" class="ghost-button slim" type="button">Run Publish</button>
+            </div>
+            <div class="pillar-distribution-card">
+              <div class="panel-header compact"><div><p class="panel-label">Pillar Distribution</p><h3>Educational vs Direct Offer</h3></div></div>
+              <div class="pillar-distribution-row">
+                <canvas id="contentPillarDistributionChart" height="120"></canvas>
+                <p id="contentPillarDistributionSummary" class="table-summary">Waiting for filtered posts...</p>
+              </div>
+            </div>
+            <div class="lead-select-filters">
+              <label><span>Search</span><input id="contentPostSearch" type="search" placeholder="Search hook, topic, post ID..." /></label>
+              <label>
+                <span>Week</span>
+                <select id="contentPostWeekFilter">
+                  <option value="">All</option>
+                  <option value="1">Week 1</option>
+                  <option value="2">Week 2</option>
+                  <option value="3">Week 3</option>
+                  <option value="4">Week 4</option>
+                </select>
+              </label>
+              <label>
+                <span>Platform</span>
+                <select id="contentPostPlatformFilter">
+                  <option value="">All</option>
+                  <option value="instagram">Instagram</option>
+                  <option value="facebook">Facebook</option>
+                  <option value="tiktok">TikTok</option>
+                </select>
+              </label>
+              <label>
+                <span>Status</span>
+                <select id="contentPostStatusFilter">
+                  <option value="">All</option>
+                  <option value="draft">Draft</option>
+                  <option value="in_review">In review</option>
+                  <option value="approved">Approved</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="publishing">Publishing</option>
+                  <option value="published">Published</option>
+                  <option value="failed">Failed</option>
+                </select>
+              </label>
+            </div>
+            <div class="table-wrap lead-select-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th><input id="contentSelectAll" type="checkbox" aria-label="Select all posts" /></th>
+                    <th>Post</th>
+                    <th>Status</th>
+                    <th>When</th>
+                    <th>Platforms</th>
+                    <th>Topic</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="contentPostTable"></tbody>
+              </table>
+            </div>
+          </section>
+        </div>
+
         <div hidden aria-hidden="true">
           <ul id="readinessList" class="check-list"></ul>
           <textarea id="notesBody"></textarea>
@@ -718,6 +997,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js"></script>
+    <script type="module" src="./app.js?v=20260401-4"></script>
   </body>
 </html>

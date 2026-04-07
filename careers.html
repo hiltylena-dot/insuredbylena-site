@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+    <meta http-equiv="Pragma" content="no-cache" />
+    <meta http-equiv="Expires" content="0" />
+    <title>Careers | Insured by Lena</title>
+    <meta
+      name="description"
+      content="Explore career opportunities with Insured by Lena and reach out about support, mentorship, and team growth."
+    />
+    <meta property="og:title" content="Careers | Insured by Lena" />
+    <meta
+      property="og:description"
+      content="Explore career opportunities with Insured by Lena and reach out about support, mentorship, and team growth."
+    />
+    <meta property="og:type" content="website" />
+    <meta name="theme-color" content="#2D3027" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="./landing.css?v=20260407-2" />
+  </head>
+  <body id="top" class="careers-page">
+    <div class="ambient-layer" aria-hidden="true"></div>
+
+    <header class="site-header">
+      <a class="brand" href="./index.html" aria-label="Insured by Lena home">
+        <span class="brand-mark">Insured by Lena</span>
+      </a>
+      <nav class="header-nav" aria-label="Primary">
+        <a class="underline-link" href="./index.html#services">Coverage</a>
+        <a class="underline-link" href="./index.html#path">Process</a>
+        <a class="underline-link" href="./index.html#contact">Contact</a>
+        <a class="underline-link" href="./about.html">About</a>
+        <a class="underline-link is-current" href="./careers.html">Careers</a>
+        <a class="underline-link portal-link" href="/portal/">Team Portal</a>
+      </nav>
+      <a class="brand-email" href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a>
+      <div class="header-actions">
+        <div class="header-contact">
+          <a href="tel:+15616339964">+1 561 633 9964</a>
+        </div>
+        <a class="team-link header-cta" href="./index.html#contact">Book Review</a>
+      </div>
+    </header>
+
+    <main>
+      <section class="careers-hero">
+        <div class="careers-shell">
+          <div class="careers-intro">
+            <h1>Thinking about a career in insurance?</h1>
+            <p class="lead">
+              Reach out to explore support, mentorship, and team opportunities for licensed agents or those working toward it.
+            </p>
+          </div>
+          <div id="join-my-team" class="join-team-panel careers-panel">
+            <p class="section-label">Join the Team</p>
+            <h2>Start the conversation here</h2>
+            <p>
+              Share a few details about your background and goals. A follow-up will be sent shortly to continue the conversation.
+            </p>
+            <form id="joinTeamForm" class="consult-form join-team-form">
+              <div class="form-grid">
+                <label>
+                  <span>Name</span>
+                  <input type="text" name="name" placeholder="Your full name" required />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input type="email" name="email" placeholder="you@example.com" required />
+                </label>
+                <label>
+                  <span>Phone</span>
+                  <input type="tel" name="phone" placeholder="(561) 633-9964" />
+                </label>
+                <label>
+                  <span>Experience</span>
+                  <select name="experience" required>
+                    <option value="">Select one</option>
+                    <option>Licensed now</option>
+                    <option>Working toward license</option>
+                    <option>Exploring opportunities</option>
+                  </select>
+                </label>
+                <label class="form-wide">
+                  <span>Tell us a bit about yourself</span>
+                  <textarea
+                    name="message"
+                    rows="4"
+                    placeholder="Share your background, goals, and the best time to connect."
+                  ></textarea>
+                </label>
+              </div>
+              <div class="consult-actions">
+                <button class="btn primary" type="submit">Send Details</button>
+                <p class="form-note">
+                  Or email directly at <a href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a>.
+                </p>
+              </div>
+            </form>
+            <p class="form-status" id="joinTeamFormStatus" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p class="footer-line">© <span id="year"></span> Insured by Lena | Licensed Insurance Professional | NPN: 22132638</p>
+    </footer>
+
+    <div class="sticky-contact-bar" role="contentinfo" aria-label="Quick contact">
+      <a href="mailto:hello@insuredbylena.com">hello@insuredbylena.com</a>
+      <span aria-hidden="true">|</span>
+      <a href="tel:+15616339964">+1 561 633 9964</a>
+    </div>
+
+    <script>
+      document.getElementById("year").textContent = new Date().getFullYear();
+
+      function trackEvent(name, props) {
+        window.dataLayer = window.dataLayer || [];
+        window.dataLayer.push({ event: name, ...props });
+      }
+
+      const PUBLIC_INTAKE_ENDPOINT =
+        window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
+          ? "http://127.0.0.1:8787/api/public/intake"
+          : "https://script.google.com/macros/s/AKfycbzlV2CFwUdCT3NGOE_MskTodKs7flQ-ve2jdMu__GtGochXvofUL-fwvghZMblkjfFU/exec";
+
+      function isGoogleEndpoint(url) {
+        return url.includes("script.google.com/macros");
+      }
+
+      function setFormStatus(message, tone) {
+        const status = document.getElementById("joinTeamFormStatus");
+        if (!status) return;
+        status.textContent = message || "";
+        status.dataset.tone = tone || "";
+      }
+
+      async function submitPublicIntake(form, payload, successLabel) {
+        const submitBtn = form.querySelector("button[type='submit']");
+        const originalLabel = submitBtn ? submitBtn.textContent : "";
+        if (submitBtn) {
+          submitBtn.disabled = true;
+          submitBtn.textContent = "Sending...";
+        }
+        setFormStatus("Sending your request...", "");
+
+        try {
+          let result = { ok: true };
+          if (isGoogleEndpoint(PUBLIC_INTAKE_ENDPOINT)) {
+            const body = new URLSearchParams();
+            Object.entries(payload).forEach(([key, value]) => {
+              body.set(key, value ?? "");
+            });
+            await fetch(PUBLIC_INTAKE_ENDPOINT, {
+              method: "POST",
+              mode: "no-cors",
+              body
+            });
+          } else {
+            const response = await fetch(PUBLIC_INTAKE_ENDPOINT, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Accept: "application/json"
+              },
+              body: JSON.stringify(payload)
+            });
+            result = await response.json().catch(() => ({}));
+            if (!response.ok || !result.ok) {
+              throw new Error(result.error || `Request failed (${response.status})`);
+            }
+          }
+
+          form.reset();
+          setFormStatus("Thanks. We’ll review your details and be in touch about team opportunities.", "success");
+
+          if (submitBtn) {
+            submitBtn.textContent = successLabel;
+            window.setTimeout(() => {
+              submitBtn.textContent = originalLabel;
+              submitBtn.disabled = false;
+            }, 1800);
+          }
+
+          return result;
+        } catch (error) {
+          console.error("Join team submit failed:", error);
+          setFormStatus("Something went wrong. Please try again in a moment.", "error");
+          if (submitBtn) {
+            submitBtn.textContent = "Try Again";
+            submitBtn.disabled = false;
+            window.setTimeout(() => {
+              submitBtn.textContent = originalLabel;
+            }, 1800);
+          }
+          return null;
+        }
+      }
+
+      const joinTeamForm = document.getElementById("joinTeamForm");
+      if (joinTeamForm) {
+        joinTeamForm.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          const formData = new FormData(joinTeamForm);
+          trackEvent("join_team_submit", {
+            experience: formData.get("experience") || ""
+          });
+          await submitPublicIntake(
+            joinTeamForm,
+            {
+              source: "join_team",
+              fullName: formData.get("name") || "",
+              email: formData.get("email") || "",
+              phone: formData.get("phone") || "",
+              coverageNeed: formData.get("experience") || "Join My Team",
+              message: formData.get("message") || ""
+            },
+            "Sent"
+          );
+        });
+      }
+    </script>
+  </body>
+</html>
