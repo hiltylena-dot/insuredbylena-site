@@ -2,11 +2,11 @@
 set -euo pipefail
 
 DEPLOY_HOST="${DEPLOY_HOST:-server367.web-hosting.com}"
-DEPLOY_USER="${DEPLOY_USER:-insubhmy}"
+DEPLOY_USER="${DEPLOY_USER:-lenahilty}"
 DEPLOY_PASSWORD="${DEPLOY_PASSWORD:?Set DEPLOY_PASSWORD}"
 DEPLOY_PORT="${DEPLOY_PORT:-21098}"
-REMOTE_ROOT="${REMOTE_ROOT:-/home/insubhmy/public_html}"
-REMOTE_PORTAL_AUTH_DIR="${REMOTE_PORTAL_AUTH_DIR:-/home/insubhmy/portal-auth}"
+REMOTE_ROOT="${REMOTE_ROOT:-/home/$DEPLOY_USER/public_html}"
+REMOTE_PORTAL_AUTH_DIR="${REMOTE_PORTAL_AUTH_DIR:-/home/$DEPLOY_USER/portal-auth}"
 AUTH_FILE_LOCAL="${AUTH_FILE_LOCAL:-.htpasswd}"
 
 if [[ ! -f "$AUTH_FILE_LOCAL" ]]; then
