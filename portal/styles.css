@@ -2296,11 +2296,16 @@ button:disabled:hover,
 }
 
 .calldesk-form label.sync-toggle {
-  display: flex !important;
+  display: inline-flex !important;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
   cursor: pointer;
+  width: fit-content;
+}
+
+.calldesk-form label.sync-toggle .sync-toggle-copy {
+  font-weight: 700;
+  color: var(--text);
 }
 
 .calldesk-form label.sync-toggle .sync-toggle-box {
