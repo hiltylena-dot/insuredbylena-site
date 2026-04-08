@@ -51,8 +51,8 @@ body.auth-locked .app-shell {
   justify-content: center;
   padding: 24px;
   background:
-    linear-gradient(180deg, rgba(247, 249, 252, 0.88), rgba(238, 242, 247, 0.94)),
-    radial-gradient(circle at top left, rgba(63, 107, 214, 0.12), transparent 28%);
+    linear-gradient(180deg, rgba(12, 18, 28, 0.88), rgba(8, 13, 22, 0.94)),
+    radial-gradient(circle at top left, rgba(63, 107, 214, 0.18), transparent 28%);
   backdrop-filter: blur(14px);
 }
 
@@ -62,12 +62,12 @@ body.auth-locked .auth-gate {
 
 .auth-card {
   width: min(460px, 100%);
-  border: 1px solid var(--line);
+  border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.98) !important;
-  box-shadow: 0 24px 60px rgba(31, 45, 61, 0.16);
+  background: linear-gradient(180deg, rgba(17, 24, 39, 0.98), rgba(10, 15, 25, 0.98)) !important;
+  box-shadow: 0 24px 60px rgba(0, 0, 0, 0.35);
   padding: 28px;
-  color: var(--text) !important;
+  color: #f8fafc !important;
 }
 
 .auth-eyebrow {
@@ -76,19 +76,19 @@ body.auth-locked .auth-gate {
   letter-spacing: 0.14em;
   font-size: 0.7rem;
   font-weight: 700;
-  color: var(--accent);
+  color: #93c5fd !important;
 }
 
 .auth-card h1 {
   margin: 0 0 12px;
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   letter-spacing: -0.03em;
-  color: var(--text) !important;
+  color: #f8fafc !important;
 }
 
 .auth-copy {
   margin: 0 0 18px;
-  color: var(--muted) !important;
+  color: #cbd5e1 !important;
   line-height: 1.65;
 }
 
@@ -105,22 +105,22 @@ body.auth-locked .auth-gate {
 .auth-form span {
   font-size: 0.84rem;
   font-weight: 700;
-  color: var(--text) !important;
+  color: #e2e8f0 !important;
 }
 
 .auth-form input {
   width: 100%;
   appearance: none;
-  border: 1px solid var(--line);
+  border: 1px solid rgba(148, 163, 184, 0.24);
   border-radius: 14px;
   padding: 12px 14px;
-  background: #ffffff !important;
-  color: var(--text) !important;
+  background: rgba(15, 23, 42, 0.92) !important;
+  color: #f8fafc !important;
   font: inherit;
 }
 
 .auth-form input::placeholder {
-  color: #6b7280 !important;
+  color: #94a3b8 !important;
 }
 
 .auth-submit {
@@ -132,7 +132,7 @@ body.auth-locked .auth-gate {
 
 .auth-status {
   margin: 14px 0 0;
-  color: var(--muted) !important;
+  color: #cbd5e1 !important;
   min-height: 1.3em;
 }
 
@@ -151,7 +151,7 @@ body.auth-locked .auth-gate {
 .auth-card strong,
 .auth-card h1,
 .auth-card input {
-  color: var(--text) !important;
+  color: #f8fafc !important;
 }
 
 .portal-user-shell {
