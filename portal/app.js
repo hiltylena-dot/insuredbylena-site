@@ -154,6 +154,9 @@ const ACTIVE_SESSION_STORAGE_KEY = "openclaw_active_session";
 const LEAD_SELECTION_MAX_ROWS = 250;
 const GOOGLE_WEBHOOK_URL =
   "https://script.google.com/macros/s/AKfycbxWyhM9FG7Jwd9iri4ppb0699ohLRGHMpdXFFp047B2FabnSUUzBEv0k7Vw-t0MA-3xpQ/exec";
+const GOOGLE_CALENDAR_WEB_APP_URL =
+  "https://script.google.com/macros/s/AKfycbxk1dJdN9crf7AuEmF0ddHqIKXRTCO9e0TJSjLMHyR43L71tDAc4DWmERLq3OAN6JN7/exec";
+const GOOGLE_CALENDAR_WEB_APP_SECRET = "Lvmh0509";
 const LOCAL_DB_SYNC_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/sync` : "";
 const LOCAL_DB_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/import` : "";
 const LOCAL_DB_LEAD_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads` : "";
@@ -526,6 +529,42 @@ async function scheduleAppointmentInSupabase({
     scheduledInternally: true,
     warning: "Saved to portal schedule. Google Calendar sync is still local-only.",
   };
+}
+
+async function createGoogleCalendarEvent({
+  clientName,
+  email,
+  phone,
+  scheduledAt,
+  description,
+  durationMinutes = 30,
+}) {
+  if (!GOOGLE_CALENDAR_WEB_APP_URL.trim()) {
+    return {
+      ok: false,
+      error: "Google Calendar web app URL is not configured.",
+    };
+  }
+  const response = await fetch(GOOGLE_CALENDAR_WEB_APP_URL, {
+    method: "POST",
+    headers: {
+      "Content-Type": "text/plain;charset=utf-8",
+    },
+    body: JSON.stringify({
+      secret: GOOGLE_CALENDAR_WEB_APP_SECRET,
+      clientName,
+      email,
+      phone,
+      scheduledAt,
+      description,
+      durationMinutes,
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) {
+    throw new Error(String(data?.error || `Google Calendar sync failed (${response.status})`));
+  }
+  return data;
 }
 
 async function loadCarrierConfigsFromSupabase() {
@@ -7369,13 +7408,21 @@ async function saveLeadData() {
       throw new Error("Follow-up date/time is required to sync calendar.");
     }
     if (shouldSchedule && followUpAt) {
+      const googleScheduleData = await createGoogleCalendarEvent({
+        clientName,
+        email: lead.email || "",
+        phone: lead.phone || "",
+        scheduledAt: followUpAt,
+        description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
+        durationMinutes: 30,
+      });
       const scheduleData = supabase
         ? await scheduleAppointmentInSupabase({
             contactId: payload.contactId,
             clientName,
             email: lead.email || "",
             phone: lead.phone || "",
-            scheduledAt: followUpAt,
+            scheduledAt: googleScheduleData.nextAppointmentTime || followUpAt,
             description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
             disposition: currentDisposition,
           })
@@ -7403,8 +7450,8 @@ async function saveLeadData() {
       if (!scheduleData?.ok) {
         throw new Error(String(scheduleData?.error || "Calendar schedule failed"));
       }
-      payload.calendarEventId = String(scheduleData.calendarEventId || "").trim();
-      payload.nextAppointmentTime = String(scheduleData.nextAppointmentTime || followUpAt).trim();
+      payload.calendarEventId = String(googleScheduleData.calendarEventId || scheduleData.calendarEventId || "").trim();
+      payload.nextAppointmentTime = String(scheduleData.nextAppointmentTime || googleScheduleData.nextAppointmentTime || followUpAt).trim();
     }
 
     if (GOOGLE_WEBHOOK_URL.trim()) {
