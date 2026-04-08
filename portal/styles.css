@@ -30,6 +30,7 @@ body {
   color: var(--text);
   background: var(--bg-accent);
   font-size: 14px;
+  color-scheme: light;
 }
 
 body.auth-locked {
@@ -63,9 +64,10 @@ body.auth-locked .auth-gate {
   width: min(460px, 100%);
   border: 1px solid var(--line);
   border-radius: 24px;
-  background: rgba(255, 255, 255, 0.94);
+  background: rgba(255, 255, 255, 0.98) !important;
   box-shadow: 0 24px 60px rgba(31, 45, 61, 0.16);
   padding: 28px;
+  color: var(--text) !important;
 }
 
 .auth-eyebrow {
@@ -81,12 +83,12 @@ body.auth-locked .auth-gate {
   margin: 0 0 12px;
   font-size: clamp(1.6rem, 4vw, 2.2rem);
   letter-spacing: -0.03em;
-  color: var(--text);
+  color: var(--text) !important;
 }
 
 .auth-copy {
   margin: 0 0 18px;
-  color: var(--muted);
+  color: var(--muted) !important;
   line-height: 1.65;
 }
 
@@ -103,7 +105,7 @@ body.auth-locked .auth-gate {
 .auth-form span {
   font-size: 0.84rem;
   font-weight: 700;
-  color: var(--text);
+  color: var(--text) !important;
 }
 
 .auth-form input {
@@ -112,9 +114,13 @@ body.auth-locked .auth-gate {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px 14px;
-  background: #ffffff;
-  color: var(--text);
+  background: #ffffff !important;
+  color: var(--text) !important;
   font: inherit;
+}
+
+.auth-form input::placeholder {
+  color: #6b7280 !important;
 }
 
 .auth-submit {
@@ -126,7 +132,7 @@ body.auth-locked .auth-gate {
 
 .auth-status {
   margin: 14px 0 0;
-  color: var(--muted);
+  color: var(--muted) !important;
   min-height: 1.3em;
 }
 
@@ -141,8 +147,11 @@ body.auth-locked .auth-gate {
 .auth-card,
 .auth-card p,
 .auth-card label,
-.auth-card span {
-  color: var(--text);
+.auth-card span,
+.auth-card strong,
+.auth-card h1,
+.auth-card input {
+  color: var(--text) !important;
 }
 
 .portal-user-shell {
