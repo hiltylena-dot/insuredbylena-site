@@ -7536,7 +7536,7 @@ async function saveLeadData() {
     let successButtonLabel = "Saved to CRM ✅";
     if (statusEl) {
       if (shouldSchedule && syncWarning) {
-        statusEl.textContent = "Saved in portal. Scheduling needs attention.";
+        statusEl.textContent = `Saved in portal. Scheduling needs attention: ${syncWarning}`;
         successButtonLabel = "Saved - scheduling needs attention";
       } else {
         statusEl.textContent = shouldSchedule && supabase
