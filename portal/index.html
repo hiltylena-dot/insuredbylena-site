@@ -275,6 +275,58 @@
         }
       }
 
+      body.auth-locked {
+        background: linear-gradient(180deg, #0b1220 0%, #111a2b 100%) !important;
+      }
+
+      body.auth-locked .auth-gate {
+        display: flex !important;
+        background:
+          linear-gradient(180deg, rgba(5, 10, 18, 0.92), rgba(10, 16, 28, 0.96)) !important,
+          radial-gradient(circle at top left, rgba(59, 130, 246, 0.16), transparent 28%) !important;
+      }
+
+      body.auth-locked .auth-card {
+        background: linear-gradient(180deg, rgba(17, 24, 39, 0.99), rgba(10, 15, 25, 0.99)) !important;
+        border: 1px solid rgba(148, 163, 184, 0.22) !important;
+        color: #f8fafc !important;
+      }
+
+      body.auth-locked .auth-card,
+      body.auth-locked .auth-card h1,
+      body.auth-locked .auth-card p,
+      body.auth-locked .auth-card label,
+      body.auth-locked .auth-card span,
+      body.auth-locked .auth-status {
+        color: #f8fafc !important;
+      }
+
+      body.auth-locked .auth-copy,
+      body.auth-locked .auth-status {
+        color: #cbd5e1 !important;
+      }
+
+      body.auth-locked .auth-form input {
+        background: rgba(15, 23, 42, 0.96) !important;
+        border: 1px solid rgba(148, 163, 184, 0.28) !important;
+        color: #f8fafc !important;
+        -webkit-text-fill-color: #f8fafc !important;
+        caret-color: #f8fafc !important;
+      }
+
+      body.auth-locked .auth-form input::placeholder {
+        color: #94a3b8 !important;
+        -webkit-text-fill-color: #94a3b8 !important;
+      }
+
+      body.auth-locked .auth-form input:-webkit-autofill,
+      body.auth-locked .auth-form input:-webkit-autofill:hover,
+      body.auth-locked .auth-form input:-webkit-autofill:focus {
+        -webkit-text-fill-color: #f8fafc !important;
+        box-shadow: 0 0 0 1000px rgba(15, 23, 42, 0.96) inset !important;
+        transition: background-color 9999s ease-out 0s !important;
+      }
+
     </style>
   </head>
   <body>
