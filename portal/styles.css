@@ -2300,20 +2300,41 @@ button:disabled:hover,
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  cursor: pointer;
 }
 
 .calldesk-form label.sync-toggle input[type="checkbox"] {
-  width: 18px !important;
-  height: 18px !important;
+  width: 22px !important;
+  height: 22px !important;
   margin: 0 !important;
-  appearance: auto !important;
-  -webkit-appearance: checkbox !important;
-  border: 0 !important;
-  border-radius: 4px !important;
+  appearance: none !important;
+  -webkit-appearance: none !important;
+  border: 2px solid #94a3b8 !important;
+  border-radius: 6px !important;
   background: #ffffff !important;
-  accent-color: #2563eb;
   box-shadow: none !important;
   cursor: pointer;
+  display: inline-grid !important;
+  place-content: center !important;
+  flex: 0 0 22px !important;
+}
+
+.calldesk-form label.sync-toggle input[type="checkbox"]::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+  transform: scale(0);
+  transition: transform 120ms ease;
+  background: #2563eb;
+}
+
+.calldesk-form label.sync-toggle input[type="checkbox"]:checked {
+  border-color: #2563eb !important;
+}
+
+.calldesk-form label.sync-toggle input[type="checkbox"]:checked::after {
+  transform: scale(1);
 }
 
 .ops-footer-tools {
