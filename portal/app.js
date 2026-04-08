@@ -7251,9 +7251,19 @@ function clearWrapUpFields() {
 
   document.getElementById("deskSyncGog")?.addEventListener("change", () => {
     document.getElementById("callDeskStatus").textContent = "In progress";
+    updateSyncToggleUi();
     updateGeneratedCallSummary();
     updateSaveButtonAvailability();
   });
+}
+
+function updateSyncToggleUi() {
+  const toggle = document.getElementById("deskSyncGog");
+  const stateEl = document.getElementById("deskSyncGogState");
+  if (!toggle || !stateEl) return;
+  const isOn = Boolean(toggle.checked);
+  stateEl.textContent = isOn ? "ON" : "OFF";
+  stateEl.classList.toggle("is-off", !isOn);
 }
 
 function setSavingState(isSaving) {
@@ -7919,6 +7929,7 @@ function attachCallDeskHandlers() {
     });
     const syncToggle = document.getElementById("deskSyncGog");
     if (syncToggle) syncToggle.checked = true;
+    updateSyncToggleUi();
     const objectionHighlight = document.getElementById("deskObjectionHighlight");
     if (objectionHighlight) {
       objectionHighlight.hidden = true;
@@ -7994,6 +8005,7 @@ function attachCallDeskHandlers() {
   });
 
   updateSaveButtonAvailability();
+  updateSyncToggleUi();
 }
 
 function saveCriteria() {
