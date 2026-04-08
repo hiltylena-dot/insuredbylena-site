@@ -1089,6 +1089,12 @@ code {
   gap: 8px;
 }
 
+.notes-toolbar .ghost-button {
+  cursor: pointer;
+  position: relative;
+  z-index: 1;
+}
+
 #notesBody {
   border: 1px solid var(--line);
   border-radius: 16px;
@@ -2300,6 +2306,14 @@ button:disabled:hover,
   width: 18px !important;
   height: 18px !important;
   margin: 0 !important;
+  appearance: auto !important;
+  -webkit-appearance: checkbox !important;
+  border: 0 !important;
+  border-radius: 4px !important;
+  background: #ffffff !important;
+  accent-color: #2563eb;
+  box-shadow: none !important;
+  cursor: pointer;
 }
 
 .ops-footer-tools {
