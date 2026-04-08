@@ -365,11 +365,13 @@ async function saveLeadToSupabase(row) {
   if (!supabase) throw new Error("Supabase lead store is not configured.");
   const payload = buildLeadPayloadForSupabase(row);
   if (!payload.lead_external_id) throw new Error("Lead external ID is required.");
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from("lead_master")
-    .upsert(payload, { onConflict: "lead_external_id" });
+    .upsert(payload, { onConflict: "lead_external_id" })
+    .select("*")
+    .single();
   if (error) throw error;
-  return true;
+  return data || payload;
 }
 
 async function updateLeadPipelineInSupabase(lead, stage) {
@@ -468,7 +470,16 @@ async function scheduleAppointmentInSupabase({
   disposition,
 }) {
   if (!supabase) throw new Error("Supabase scheduling is not configured.");
-  const lead = getLeadByExternalId(contactId);
+  let lead = getLeadByExternalId(contactId);
+  if (!lead?.lead_id) {
+    const { data: dbLead, error: leadLookupError } = await supabase
+      .from("lead_master")
+      .select("*")
+      .eq("lead_external_id", String(contactId || "").trim())
+      .maybeSingle();
+    if (leadLookupError) throw leadLookupError;
+    if (dbLead) lead = dbLead;
+  }
   if (!lead?.lead_id) throw new Error("Lead must be synced to Supabase before scheduling.");
 
   const bookingDate = toIsoOrNull(scheduledAt);
@@ -7428,6 +7439,12 @@ async function saveLeadData() {
   try {
     const shouldSchedule = syncViaGog && ["callback", "follow_up"].includes(currentDisposition);
     let calendarWarning = "";
+    if (supabase) {
+      const savedLead = await saveLeadToSupabase(payload);
+      if (savedLead?.lead_external_id) {
+        payload.contactId = String(savedLead.lead_external_id || payload.contactId).trim();
+      }
+    }
     if (shouldSchedule && !followUpAt) {
       throw new Error("Follow-up date/time is required to sync calendar.");
     }
@@ -7497,9 +7514,7 @@ async function saveLeadData() {
         body: JSON.stringify(payload),
       });
     }
-    if (supabase) {
-      await saveLeadToSupabase(payload);
-    } else if (LOCAL_DB_SYNC_URL.trim()) {
+    if (!supabase && LOCAL_DB_SYNC_URL.trim()) {
       const localResponse = await fetch(LOCAL_DB_SYNC_URL, {
         method: "POST",
         headers: {
