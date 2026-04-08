@@ -7538,6 +7538,9 @@ async function saveLeadData() {
       if (shouldSchedule && syncWarning) {
         statusEl.textContent = `Saved in portal. Scheduling needs attention: ${syncWarning}`;
         successButtonLabel = "Saved - scheduling needs attention";
+        window.setTimeout(() => {
+          window.alert(`Scheduling needs attention:\n\n${syncWarning}`);
+        }, 0);
       } else {
         statusEl.textContent = shouldSchedule && supabase
           ? "Saved and scheduled in portal."
