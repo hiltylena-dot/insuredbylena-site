@@ -7292,7 +7292,7 @@ function setSavingState(isSaving) {
   updateSaveButtonAvailability();
 }
 
-function setSaveStatus(status) {
+function setSaveStatus(status, labelOverride = "") {
   state.ui.saveStatus = status;
   const btn = document.getElementById("deskSaveToNotesBtn");
   if (!btn) return;
@@ -7303,7 +7303,7 @@ function setSaveStatus(status) {
   }
   if (status === "success") {
     btn.disabled = true;
-    btn.textContent = "Saved to CRM ✅";
+    btn.textContent = labelOverride || "Saved to CRM ✅";
     return;
   }
   if (status === "error") {
@@ -7533,16 +7533,21 @@ async function saveLeadData() {
     }
     applySavedPayloadToLeadState(payload);
     // With no-cors, response is opaque; if no error is thrown, treat as success.
+    let successButtonLabel = "Saved to CRM ✅";
     if (statusEl) {
       if (shouldSchedule && syncWarning) {
         statusEl.textContent = "Saved in portal. Scheduling needs attention.";
+        successButtonLabel = "Saved - scheduling needs attention";
       } else {
         statusEl.textContent = shouldSchedule && supabase
           ? "Saved and scheduled in portal."
           : "Data synced successfully.";
+        successButtonLabel = shouldSchedule && supabase
+          ? "Saved and scheduled ✅"
+          : "Saved to CRM ✅";
       }
     }
-    setSaveStatus("success");
+    setSaveStatus("success", successButtonLabel);
     if (shouldSchedule && supabase) {
       refreshTodaysAppointments().catch(() => {});
       refreshCalendarTabData().catch(() => {});
