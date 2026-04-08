@@ -579,7 +579,13 @@
                   <label><span>Disposition</span><select id="deskDisposition"><option value="">Select</option><option value="quoted">Quoted</option><option value="follow_up">Follow-up</option><option value="callback">Callback</option><option value="no_answer">No Answer</option><option value="not_interested">Not interested</option><option value="not_qualified">Not qualified</option><option value="sold">Sold</option></select><span class="field-helper">Warning: 'Not Qualified' will permanently remove lead from active queues.</span></label>
                   <label><span>Next step</span><input id="deskNextStep" type="text" /></label>
                   <label><span>Follow-up date/time</span><input id="deskFollowUp" type="datetime-local" /></label>
-                  <label class="sync-toggle"><span>Sync via Openclaw GOG</span><input id="deskSyncGog" type="checkbox" checked /></label>
+                  <label class="sync-toggle">
+                    <span>Sync via Openclaw GOG</span>
+                    <span class="sync-toggle-box">
+                      <input id="deskSyncGog" type="checkbox" checked />
+                      <span class="sync-toggle-indicator" aria-hidden="true"></span>
+                    </span>
+                  </label>
                 </div>
                 <div class="notes-toolbar">
                   <button class="ghost-button slim" type="button" data-desk-chip="Asked for callback">Callback</button>
@@ -1035,6 +1041,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260408-6"></script>
+    <script type="module" src="./app.js?v=20260408-7"></script>
   </body>
 </html>

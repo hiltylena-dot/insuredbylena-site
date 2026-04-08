@@ -2303,38 +2303,61 @@ button:disabled:hover,
   cursor: pointer;
 }
 
+.calldesk-form label.sync-toggle .sync-toggle-box {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+}
+
 .calldesk-form label.sync-toggle input[type="checkbox"] {
-  width: 22px !important;
-  height: 22px !important;
+  position: absolute !important;
+  inset: 0 !important;
+  width: 24px !important;
+  height: 24px !important;
   margin: 0 !important;
-  appearance: none !important;
-  -webkit-appearance: none !important;
-  border: 2px solid #94a3b8 !important;
-  border-radius: 6px !important;
-  background: #ffffff !important;
-  box-shadow: none !important;
+  opacity: 0 !important;
   cursor: pointer;
-  display: inline-grid !important;
-  place-content: center !important;
-  flex: 0 0 22px !important;
+  z-index: 2;
 }
 
-.calldesk-form label.sync-toggle input[type="checkbox"]::after {
+.calldesk-form label.sync-toggle .sync-toggle-indicator {
+  position: absolute;
+  inset: 0;
+  border: 2px solid #94a3b8;
+  border-radius: 6px;
+  background: #ffffff;
+  box-shadow: 0 0 0 1px rgba(15, 23, 42, 0.04);
+  transition: border-color 120ms ease, background-color 120ms ease, box-shadow 120ms ease;
+}
+
+.calldesk-form label.sync-toggle .sync-toggle-indicator::after {
   content: "";
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
-  transform: scale(0);
+  position: absolute;
+  left: 7px;
+  top: 3px;
+  width: 6px;
+  height: 11px;
+  border-right: 3px solid #ffffff;
+  border-bottom: 3px solid #ffffff;
+  transform: rotate(45deg) scale(0);
+  transform-origin: center;
   transition: transform 120ms ease;
+}
+
+.calldesk-form label.sync-toggle input[type="checkbox"]:checked + .sync-toggle-indicator {
   background: #2563eb;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.16);
 }
 
-.calldesk-form label.sync-toggle input[type="checkbox"]:checked {
-  border-color: #2563eb !important;
+.calldesk-form label.sync-toggle input[type="checkbox"]:checked + .sync-toggle-indicator::after {
+  transform: rotate(45deg) scale(1);
 }
 
-.calldesk-form label.sync-toggle input[type="checkbox"]:checked::after {
-  transform: scale(1);
+.calldesk-form label.sync-toggle input[type="checkbox"]:focus-visible + .sync-toggle-indicator {
+  outline: 2px solid rgba(96, 165, 250, 0.95);
+  outline-offset: 2px;
 }
 
 .ops-footer-tools {
