@@ -32,6 +32,131 @@ body {
   font-size: 14px;
 }
 
+body.auth-locked {
+  overflow: hidden;
+}
+
+body.auth-locked .app-shell {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 5000;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background:
+    linear-gradient(180deg, rgba(247, 249, 252, 0.88), rgba(238, 242, 247, 0.94)),
+    radial-gradient(circle at top left, rgba(63, 107, 214, 0.12), transparent 28%);
+  backdrop-filter: blur(14px);
+}
+
+body.auth-locked .auth-gate {
+  display: flex;
+}
+
+.auth-card {
+  width: min(460px, 100%);
+  border: 1px solid var(--line);
+  border-radius: 24px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 24px 60px rgba(31, 45, 61, 0.16);
+  padding: 28px;
+}
+
+.auth-eyebrow {
+  margin: 0 0 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.14em;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.auth-card h1 {
+  margin: 0 0 12px;
+  font-size: clamp(1.6rem, 4vw, 2.2rem);
+  letter-spacing: -0.03em;
+  color: var(--text);
+}
+
+.auth-copy {
+  margin: 0 0 18px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.auth-form {
+  display: grid;
+  gap: 12px;
+}
+
+.auth-form label {
+  display: grid;
+  gap: 6px;
+}
+
+.auth-form span {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.auth-form input {
+  width: 100%;
+  appearance: none;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  background: #ffffff;
+  color: var(--text);
+  font: inherit;
+}
+
+.auth-submit {
+  margin-top: 4px;
+  background: var(--accent-gradient);
+  border-color: transparent;
+  color: #ffffff;
+}
+
+.auth-status {
+  margin: 14px 0 0;
+  color: var(--muted);
+  min-height: 1.3em;
+}
+
+.auth-status[data-tone="error"] {
+  color: var(--red);
+}
+
+.auth-status[data-tone="success"] {
+  color: var(--green);
+}
+
+.auth-card,
+.auth-card p,
+.auth-card label,
+.auth-card span {
+  color: var(--text);
+}
+
+.portal-user-shell {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.portal-user-email {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #dbe9fb;
+}
+
 code {
   font-family: "SF Mono", "Menlo", monospace;
   font-size: 0.9em;
@@ -772,6 +897,22 @@ code {
   z-index: 60;
 }
 
+#carrierSettingsModal {
+  align-items: flex-start;
+  overflow-y: auto;
+  padding-top: 72px;
+  padding-bottom: 24px;
+}
+
+.carrier-settings-floating-actions {
+  position: fixed;
+  top: 74px;
+  right: 20px;
+  z-index: 80;
+  display: flex;
+  gap: 8px;
+}
+
 .calldesk-modal[hidden] {
   display: none;
 }
@@ -784,15 +925,46 @@ code {
   padding: 16px;
   display: grid;
   gap: 12px;
+  max-height: min(88vh, 920px);
+  overflow-y: auto;
 }
 
 .carrier-settings-modal {
   width: min(840px, 100%);
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.carrier-settings-modal > .panel-header {
+  position: sticky;
+  top: -16px;
+  z-index: 2;
+  margin: -16px -16px 0;
+  padding: 16px;
+  background: linear-gradient(180deg, rgba(9, 19, 31, 0.99), rgba(7, 16, 26, 0.98));
+  border-bottom: 1px solid rgba(117, 155, 194, 0.18);
 }
 
 .carrier-settings-list {
   display: grid;
   gap: 10px;
+  max-height: calc(88vh - 220px);
+  overflow-y: auto;
+  padding-right: 6px;
+}
+
+.carrier-settings-modal .detail-actions {
+  flex-wrap: wrap;
+}
+
+@media (max-width: 900px) {
+  .carrier-settings-floating-actions {
+    top: auto;
+    right: 12px;
+    bottom: 12px;
+  }
 }
 
 .carrier-setting-row {

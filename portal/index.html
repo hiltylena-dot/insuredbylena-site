@@ -6,6 +6,13 @@
     <title>Insurance Ops Dashboard</title>
     <link rel="stylesheet" href="./styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script>
+      window.PORTAL_CONFIG = {
+        supabaseUrl: "https://ixpdvxumkloytwfezmga.supabase.co",
+        supabasePublishableKey: "sb_publishable_b3eTZFC0Alt2H-49ZTIaiA__K5DidT5",
+        apiBase: ""
+      };
+    </script>
     <style>
       .app-shell {
         display: grid !important;
@@ -271,6 +278,25 @@
     </style>
   </head>
   <body>
+    <div id="authGate" class="auth-gate" aria-live="polite">
+      <div class="auth-card">
+        <p class="auth-eyebrow">Portal Access</p>
+        <h1>Sign in to Insured by Lena Ops</h1>
+        <p class="auth-copy">Use your portal login to access leads, appointments, content, and carrier tools remotely.</p>
+        <form id="authForm" class="auth-form">
+          <label>
+            <span>Email</span>
+            <input id="authEmail" type="email" autocomplete="username" required />
+          </label>
+          <label>
+            <span>Password</span>
+            <input id="authPassword" type="password" autocomplete="current-password" required />
+          </label>
+          <button id="authSubmitBtn" class="ghost-button auth-submit" type="submit">Sign In</button>
+        </form>
+        <p id="authStatus" class="auth-status">Checking session…</p>
+      </div>
+    </div>
     <div class="app-shell">
       <header class="top-nav">
         <div class="top-nav-left">
@@ -286,6 +312,10 @@
           </div>
         </div>
         <div class="top-nav-right">
+          <div class="portal-user-shell">
+            <span id="portalUserEmail" class="portal-user-email" hidden></span>
+            <button id="portalLogoutBtn" class="ghost-button slim" type="button" hidden>Log Out</button>
+          </div>
           <div id="topStatusPills" class="top-status-pills" title="Readiness status">
             <span id="topDncCount" class="status-pill compact">DNC: --</span>
             <span id="topQueueCount" class="status-pill compact">Queue: --</span>
@@ -619,6 +649,7 @@
                 </div>
                 <div class="detail-actions">
                   <button id="deskLaunchCarrierPortalBtn" class="save-sync-btn" type="button">Launch Carrier Portal</button>
+                  <button id="deskOpenCarrierSettingsBtn" class="ghost-button slim" type="button">Carrier Settings</button>
                 </div>
               </article>
             </div>
@@ -981,10 +1012,17 @@
         </div>
 
         <div id="carrierSettingsModal" class="calldesk-modal" role="dialog" aria-modal="true" aria-labelledby="carrierSettingsTitle" hidden>
+          <div class="carrier-settings-floating-actions">
+            <button id="carrierSettingsSaveBtnFloating" class="ghost-button slim" type="button">Save</button>
+            <button id="carrierSettingsCloseBtnFloating" class="ghost-button slim" type="button">Close</button>
+          </div>
           <div class="calldesk-modal-card carrier-settings-modal">
             <div class="panel-header compact">
               <div><p class="panel-label">Settings</p><h3 id="carrierSettingsTitle">Carrier Settings</h3></div>
-              <button id="carrierSettingsCloseBtn" class="ghost-button slim" type="button">Close</button>
+              <div class="detail-actions">
+                <button id="carrierSettingsSaveBtnTop" class="ghost-button slim" type="button">Save</button>
+                <button id="carrierSettingsCloseBtn" class="ghost-button slim" type="button">Close</button>
+              </div>
             </div>
             <p class="table-summary">Save your writing number, portal link, and support phone for each carrier.</p>
             <div id="carrierSettingsList" class="carrier-settings-list"></div>
@@ -997,6 +1035,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260401-4"></script>
+    <script type="module" src="./app.js?v=20260407-16"></script>
   </body>
 </html>

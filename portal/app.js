@@ -1,3 +1,5 @@
+import { createClient } from "https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm";
+
 const DATA_FILES = {
   leads: "./data/raw_leads.csv",
   activity: "./data/raw_activity.csv",
@@ -14,6 +16,21 @@ const formatCurrency = new Intl.NumberFormat("en-US", {
   currency: "USD",
   maximumFractionDigits: 0,
 });
+
+const PORTAL_CONFIG = window.PORTAL_CONFIG || {};
+const SUPABASE_URL = String(PORTAL_CONFIG.supabaseUrl || "").trim();
+const SUPABASE_PUBLISHABLE_KEY = String(PORTAL_CONFIG.supabasePublishableKey || "").trim();
+const API_ORIGIN = String(PORTAL_CONFIG.apiBase || "").trim();
+const supabase =
+  SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
+        auth: {
+          persistSession: true,
+          autoRefreshToken: true,
+        },
+      })
+    : null;
+let hasInitialized = false;
 
 const state = {
   leads: [],
@@ -137,21 +154,20 @@ const ACTIVE_SESSION_STORAGE_KEY = "openclaw_active_session";
 const LEAD_SELECTION_MAX_ROWS = 250;
 const GOOGLE_WEBHOOK_URL =
   "https://script.google.com/macros/s/AKfycbxWyhM9FG7Jwd9iri4ppb0699ohLRGHMpdXFFp047B2FabnSUUzBEv0k7Vw-t0MA-3xpQ/exec";
-const API_ORIGIN = `${window.location.protocol}//${window.location.hostname}:8787`;
-const LOCAL_DB_SYNC_URL = `${API_ORIGIN}/api/leads/sync`;
-const LOCAL_DB_IMPORT_URL = `${API_ORIGIN}/api/leads/import`;
-const LOCAL_DB_LEAD_BASE_URL = `${API_ORIGIN}/api/leads`;
-const LEAD_OPEN_LEASE_URL = `${API_ORIGIN}/api/leads`;
-const LOCAL_DB_CARRIER_CONFIG_URL = `${API_ORIGIN}/api/carrier-config`;
-const LOCAL_DB_CALENDAR_SCHEDULE_URL = `${API_ORIGIN}/api/calendar/schedule`;
-const LOCAL_DB_CALENDAR_TODAY_URL = `${API_ORIGIN}/api/calendar/today`;
-const LOCAL_DB_CALENDAR_WEEK_URL = `${API_ORIGIN}/api/calendar/week`;
-const LOCAL_DB_PURGE_TEST_DATA_URL = `${API_ORIGIN}/api/admin/purge-test-data`;
-const LOCAL_DB_CONTENT_POSTS_URL = `${API_ORIGIN}/api/content/posts`;
-const LOCAL_DB_CONTENT_POSTS_IMPORT_URL = `${API_ORIGIN}/api/content/posts/import`;
-const LOCAL_DB_CONTENT_POSTS_IMPORT_BUFFER_CURRENT_URL = `${API_ORIGIN}/api/content/posts/import-buffer-current`;
-const LOCAL_DB_CONTENT_PUBLISH_RUN_URL = `${API_ORIGIN}/api/content/publish/run`;
-const LOCAL_DB_CONTENT_PUBLISH_JOBS_URL = `${API_ORIGIN}/api/content/publish/jobs`;
+const LOCAL_DB_SYNC_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/sync` : "";
+const LOCAL_DB_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/import` : "";
+const LOCAL_DB_LEAD_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads` : "";
+const LEAD_OPEN_LEASE_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads` : "";
+const LOCAL_DB_CARRIER_CONFIG_URL = API_ORIGIN ? `${API_ORIGIN}/api/carrier-config` : "";
+const LOCAL_DB_CALENDAR_SCHEDULE_URL = API_ORIGIN ? `${API_ORIGIN}/api/calendar/schedule` : "";
+const LOCAL_DB_CALENDAR_TODAY_URL = API_ORIGIN ? `${API_ORIGIN}/api/calendar/today` : "";
+const LOCAL_DB_CALENDAR_WEEK_URL = API_ORIGIN ? `${API_ORIGIN}/api/calendar/week` : "";
+const LOCAL_DB_PURGE_TEST_DATA_URL = API_ORIGIN ? `${API_ORIGIN}/api/admin/purge-test-data` : "";
+const LOCAL_DB_CONTENT_POSTS_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/posts` : "";
+const LOCAL_DB_CONTENT_POSTS_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/posts/import` : "";
+const LOCAL_DB_CONTENT_POSTS_IMPORT_BUFFER_CURRENT_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/posts/import-buffer-current` : "";
+const LOCAL_DB_CONTENT_PUBLISH_RUN_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/publish/run` : "";
+const LOCAL_DB_CONTENT_PUBLISH_JOBS_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/publish/jobs` : "";
 const GOOGLE_CALENDAR_EMBED_SRC = "hiltylena@gmail.com";
 const GOOGLE_CALENDAR_TZ = "America/New_York";
 const PIPELINE_STAGES = ["app_submitted", "underwriting", "approved", "issued", "paid"];
@@ -207,6 +223,387 @@ const CONTENT_VIBE_PRESETS = [
     text: "DM FUTURE and I will help you map a simple protection plan with no pressure and no jargon.",
   },
 ];
+
+function setAuthStatus(message, tone = "") {
+  const node = document.getElementById("authStatus");
+  if (!node) return;
+  node.textContent = message || "";
+  if (tone) node.dataset.tone = tone;
+  else delete node.dataset.tone;
+}
+
+function setAuthLocked(locked) {
+  document.body.classList.toggle("auth-locked", Boolean(locked));
+}
+
+function setPortalUser(session) {
+  const email = session?.user?.email || "";
+  const emailNode = document.getElementById("portalUserEmail");
+  const logoutBtn = document.getElementById("portalLogoutBtn");
+  if (emailNode) {
+    emailNode.textContent = email;
+    emailNode.hidden = !email;
+  }
+  if (logoutBtn) {
+    logoutBtn.hidden = !email;
+  }
+}
+
+function toIsoOrNull(value) {
+  const text = String(value || "").trim();
+  if (!text) return null;
+  const parsed = Date.parse(text);
+  return Number.isFinite(parsed) ? new Date(parsed).toISOString() : null;
+}
+
+function nowIso() {
+  return new Date().toISOString();
+}
+
+function buildLeadPayloadForSupabase(row = {}) {
+  const leadExternalId = String(row.lead_external_id || row.contactId || row.leadExternalId || "").trim();
+  const firstName = String(row.first_name || row.firstName || "").trim();
+  const lastName = String(row.last_name || row.lastName || "").trim();
+  const fullName =
+    String(row.full_name || row.fullName || "").trim() || `${firstName} ${lastName}`.trim() || null;
+
+  return {
+    lead_external_id: leadExternalId || null,
+    first_name: firstName || null,
+    last_name: lastName || null,
+    full_name: fullName || null,
+    email: String(row.email || "").trim() || null,
+    mobile_phone: digitsOnly(row.mobile_phone || row.mobilePhone || row.phone || "") || null,
+    business_name: String(row.business_name || row.businessName || "").trim() || null,
+    lead_source: String(row.lead_source || row.leadSource || "").trim() || null,
+    lead_source_detail: String(row.lead_source_detail || row.leadSourceDetail || "").trim() || null,
+    campaign_name: String(row.campaign_name || row.campaignName || "").trim() || null,
+    product_interest: String(row.product_interest || row.productInterest || "").trim() || null,
+    product_line: String(row.product_line || row.productLine || "").trim() || null,
+    owner_queue: String(row.owner_queue || row.ownerQueue || "").trim() || null,
+    lead_status: String(row.lead_status || row.leadStatus || "").trim() || null,
+    booking_status: String(row.booking_status || row.bookingStatus || "").trim() || null,
+    consent_status: String(row.consent_status || row.consentStatus || "").trim() || null,
+    consent_channel_sms: String(row.consent_channel_sms || row.consentChannelSms || "").trim() || null,
+    consent_channel_email: String(row.consent_channel_email || row.consentChannelEmail || "").trim() || null,
+    consent_channel_whatsapp: String(row.consent_channel_whatsapp || row.consentChannelWhatsapp || "").trim() || null,
+    dnc_status: String(row.dnc_status || row.dncStatus || "").trim() || null,
+    contact_eligibility: String(row.contact_eligibility || row.contactEligibility || "").trim() || null,
+    created_at_source: toIsoOrNull(row.created_at_source || row.createdAtSource) || null,
+    last_activity_at_source: toIsoOrNull(row.last_activity_at_source || row.lastActivity || row.lastActivityAtSource) || nowIso(),
+    notes: String(row.notes || "").trim() || null,
+    raw_tags: String(row.raw_tags || row.tags || row.rawTags || "").trim() || null,
+    routing_bucket: String(row.routing_bucket || row.routingBucket || "").trim() || null,
+    suppress_reason: String(row.suppress_reason || row.suppressReason || "").trim() || null,
+    recommended_channel: String(row.recommended_channel || row.recommendedChannel || "").trim() || null,
+    sequence_name: String(row.sequence_name || row.sequenceName || "").trim() || null,
+    recommended_next_action: String(row.recommended_next_action || row.recommendedNextAction || "").trim() || null,
+    priority_tier: String(row.priority_tier || row.priorityTier || "").trim() || null,
+    age: String(row.age || "").trim() || null,
+    tobacco: String(row.tobacco || "").trim() || null,
+    health_posture: String(row.health_posture || row.healthPosture || "").trim() || null,
+    disposition: String(row.disposition || "").trim() || null,
+    carrier_match: String(row.carrier_match || row.carrierMatch || "").trim() || null,
+    confidence: String(row.confidence || "").trim() || null,
+    pipeline_status: String(row.pipeline_status || row.pipelineStatus || "").trim() || null,
+    calendar_event_id: String(row.calendar_event_id || row.calendarEventId || "").trim() || null,
+    next_appointment_time: toIsoOrNull(row.next_appointment_time || row.nextAppointmentTime) || null,
+    last_opened_at: toIsoOrNull(row.last_opened_at || row.lastOpenedAt) || null,
+  };
+}
+
+async function loadLeadRowsFromSupabase() {
+  if (!supabase) return null;
+  const allRows = [];
+  const pageSize = 1000;
+  let from = 0;
+
+  while (true) {
+    const to = from + pageSize - 1;
+    const { data, error } = await supabase
+      .from("lead_master")
+      .select("*")
+      .order("inserted_at", { ascending: false })
+      .range(from, to);
+    if (error) throw error;
+    const rows = Array.isArray(data) ? data : [];
+    allRows.push(...rows);
+    if (rows.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return allRows;
+}
+
+async function upsertLeadRowsToSupabase(rows) {
+  if (!supabase) throw new Error("Supabase lead store is not configured.");
+  const payloads = rows
+    .map((row) => buildLeadPayloadForSupabase(row))
+    .filter((row) => row.lead_external_id);
+  if (!payloads.length) return { added: 0, skipped_existing: 0, skipped_invalid: rows.length };
+
+  const chunkSize = 250;
+  for (let i = 0; i < payloads.length; i += chunkSize) {
+    const chunk = payloads.slice(i, i + chunkSize);
+    const { error } = await supabase
+      .from("lead_master")
+      .upsert(chunk, { onConflict: "lead_external_id" });
+    if (error) throw error;
+  }
+
+  return {
+    added: payloads.length,
+    skipped_existing: 0,
+    skipped_invalid: Math.max(0, rows.length - payloads.length),
+  };
+}
+
+async function saveLeadToSupabase(row) {
+  if (!supabase) throw new Error("Supabase lead store is not configured.");
+  const payload = buildLeadPayloadForSupabase(row);
+  if (!payload.lead_external_id) throw new Error("Lead external ID is required.");
+  const { error } = await supabase
+    .from("lead_master")
+    .upsert(payload, { onConflict: "lead_external_id" });
+  if (error) throw error;
+  return true;
+}
+
+async function updateLeadPipelineInSupabase(lead, stage) {
+  if (!supabase) throw new Error("Supabase lead store is not configured.");
+  const leadId = String(lead?.lead_external_id || "").trim();
+  if (!leadId) return true;
+  const { error } = await supabase
+    .from("lead_master")
+    .update({
+      pipeline_status: String(stage || "").trim() || null,
+      last_activity_at_source: nowIso(),
+    })
+    .eq("lead_external_id", leadId);
+  if (error) throw error;
+  return true;
+}
+
+async function markLeadOpenedInSupabase(leadId) {
+  if (!supabase) throw new Error("Supabase lead store is not configured.");
+  const normalized = String(leadId || "").trim();
+  if (!normalized) return true;
+  const openedAt = nowIso();
+  const { error } = await supabase
+    .from("lead_master")
+    .update({ last_opened_at: openedAt })
+    .eq("lead_external_id", normalized);
+  if (error) throw error;
+  return openedAt;
+}
+
+function getLeadByExternalId(leadExternalId) {
+  const normalized = String(leadExternalId || "").trim();
+  if (!normalized) return null;
+  return state.leads.find((row) => String(row.lead_external_id || "").trim() === normalized) || null;
+}
+
+function getLeadByInternalId(leadId) {
+  const normalized = Number(leadId || 0);
+  if (!Number.isFinite(normalized) || normalized <= 0) return null;
+  return state.leads.find((row) => Number(row.lead_id || 0) === normalized) || null;
+}
+
+function startOfDayIso(offsetDays = 0) {
+  const dt = new Date();
+  dt.setHours(0, 0, 0, 0);
+  dt.setDate(dt.getDate() + offsetDays);
+  return dt.toISOString();
+}
+
+function endOfDayIso(offsetDays = 0) {
+  const dt = new Date();
+  dt.setHours(23, 59, 59, 999);
+  dt.setDate(dt.getDate() + offsetDays);
+  return dt.toISOString();
+}
+
+function buildCalendarEventFromAppointment(row = {}) {
+  const lead = getLeadByInternalId(row.lead_id);
+  const leadName = lead
+    ? String(lead.full_name || `${lead.first_name || ""} ${lead.last_name || ""}`).trim()
+    : "";
+  const label = row.appointment_type === "callback" ? "Callback" : "Follow-up";
+  const summary = leadName ? `${label}: ${leadName}` : label;
+  return {
+    summary,
+    start: row.booking_date,
+    htmlLink: "",
+    source: "supabase",
+    lead_id: row.lead_id,
+    lead_external_id: lead?.lead_external_id || "",
+    attendees: lead?.email ? [{ email: lead.email }] : [],
+  };
+}
+
+async function loadAppointmentsFromSupabase({ start, end, limit = 200 } = {}) {
+  if (!supabase) return [];
+  let query = supabase
+    .from("appointment")
+    .select("*")
+    .order("booking_date", { ascending: true })
+    .limit(limit);
+  if (start) query = query.gte("booking_date", start);
+  if (end) query = query.lte("booking_date", end);
+  const { data, error } = await query;
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+async function scheduleAppointmentInSupabase({
+  contactId,
+  clientName,
+  email,
+  phone,
+  scheduledAt,
+  description,
+  disposition,
+}) {
+  if (!supabase) throw new Error("Supabase scheduling is not configured.");
+  const lead = getLeadByExternalId(contactId);
+  if (!lead?.lead_id) throw new Error("Lead must be synced to Supabase before scheduling.");
+
+  const bookingDate = toIsoOrNull(scheduledAt);
+  if (!bookingDate) throw new Error("Follow-up date/time is required.");
+
+  const { data: existingRows, error: existingError } = await supabase
+    .from("appointment")
+    .select("appointment_id, booking_date")
+    .eq("lead_id", lead.lead_id)
+    .eq("owner", "call_desk")
+    .in("booking_status", ["Booked", "Rescheduled", "Pending"])
+    .gte("booking_date", startOfDayIso(-1))
+    .order("booking_date", { ascending: false })
+    .limit(1);
+  if (existingError) throw existingError;
+
+  const appointmentPayload = {
+    lead_id: lead.lead_id,
+    booking_date: bookingDate,
+    booking_status: "Booked",
+    show_status: "pending",
+    appointment_type: disposition === "callback" ? "callback" : "follow_up",
+    owner: "call_desk",
+  };
+
+  if (Array.isArray(existingRows) && existingRows.length) {
+    const { error: updateError } = await supabase
+      .from("appointment")
+      .update(appointmentPayload)
+      .eq("appointment_id", existingRows[0].appointment_id);
+    if (updateError) throw updateError;
+  } else {
+    const { error: insertError } = await supabase
+      .from("appointment")
+      .insert(appointmentPayload);
+    if (insertError) throw insertError;
+  }
+
+  const mergedNotes = [String(lead.notes || "").trim(), String(description || "").trim()]
+    .filter(Boolean)
+    .join(" | ");
+  const leadUpdate = {
+    next_appointment_time: bookingDate,
+    booking_status: "Booked",
+    last_activity_at_source: nowIso(),
+    notes: mergedNotes || null,
+  };
+  const { error: leadError } = await supabase
+    .from("lead_master")
+    .update(leadUpdate)
+    .eq("lead_id", lead.lead_id);
+  if (leadError) throw leadError;
+
+  return {
+    ok: true,
+    calendarEventId: "",
+    nextAppointmentTime: bookingDate,
+    scheduledInternally: true,
+    warning: "Saved to portal schedule. Google Calendar sync is still local-only.",
+  };
+}
+
+async function loadCarrierConfigsFromSupabase() {
+  if (!supabase) return [];
+  const { data, error } = await supabase
+    .from("agent_carrier_config")
+    .select("*")
+    .order("carrier_name", { ascending: true });
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+async function saveCarrierConfigsToSupabase(rows = []) {
+  if (!supabase) throw new Error("Supabase carrier config is not configured.");
+  const payload = rows
+    .map((row) => ({
+      carrier_name: String(row.carrier_name || "").trim(),
+      writing_number: String(row.writing_number || "").trim() || null,
+      portal_url: String(row.portal_url || "").trim() || null,
+      support_phone: String(row.support_phone || "").trim() || null,
+    }))
+    .filter((row) => row.carrier_name);
+
+  const existing = await loadCarrierConfigsFromSupabase();
+  const nextNames = new Set(payload.map((row) => row.carrier_name.toLowerCase()));
+  const staleIds = existing
+    .filter((row) => !nextNames.has(String(row.carrier_name || "").trim().toLowerCase()))
+    .map((row) => row.id)
+    .filter(Boolean);
+
+  if (staleIds.length) {
+    const { error: deleteError } = await supabase
+      .from("agent_carrier_config")
+      .delete()
+      .in("id", staleIds);
+    if (deleteError) throw deleteError;
+  }
+
+  if (payload.length) {
+    const { error: upsertError } = await supabase
+      .from("agent_carrier_config")
+      .upsert(payload, { onConflict: "carrier_name" });
+    if (upsertError) throw upsertError;
+  }
+
+  return payload;
+}
+
+async function ensureAuthenticatedSession() {
+  if (!supabase) {
+    setAuthLocked(true);
+    setAuthStatus("Supabase portal login is not configured yet.", "error");
+    return null;
+  }
+
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    setAuthLocked(true);
+    setAuthStatus(error.message || "Could not verify session.", "error");
+    return null;
+  }
+  return data.session || null;
+}
+
+async function signInToPortal(email, password) {
+  if (!supabase) throw new Error("Supabase portal login is not configured.");
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (error) throw error;
+  return data.session || null;
+}
+
+async function signOutOfPortal() {
+  if (!supabase) return;
+  await supabase.auth.signOut();
+}
 const DESK_DISCOVERY_FIELD_IDS = new Set([
   "workflowGoal",
   "workflowAge",
@@ -903,10 +1300,212 @@ function mapLenaRowsToDashboardLeads(rows) {
   });
 }
 
+function splitFullName(fullName = "") {
+  const cleaned = String(fullName || "").trim().replace(/\s+/g, " ");
+  if (!cleaned) return { firstName: "", lastName: "" };
+  const parts = cleaned.split(" ");
+  if (parts.length === 1) {
+    return {
+      firstName: parts[0],
+      lastName: "",
+    };
+  }
+  return {
+    firstName: parts.slice(0, -1).join(" "),
+    lastName: parts.slice(-1).join(" "),
+  };
+}
+
+function hasHeaderAlias(headers = [], aliases = []) {
+  return aliases.some((alias) => headers.includes(alias));
+}
+
+function findHeaderAlias(headers = [], aliases = []) {
+  return aliases.find((alias) => headers.includes(alias)) || "";
+}
+
+const GENERIC_IMPORT_ALIASES = {
+  fullName: ["Full Name", "Name", "Lead Name", "Customer Name"],
+  firstName: ["First Name", "first_name", "firstName", "Fname"],
+  lastName: ["Last Name", "last_name", "lastName", "Lname"],
+  phone: ["Phone Number", "Phone", "Mobile", "Mobile Phone", "Cell", "cell_phone"],
+  email: ["Email", "Email Address", "email_address"],
+  state: ["State", "state", "Region"],
+  leadId: ["Lead ID", "lead_id", "lead_external_id", "Contact Id", "Contact ID"],
+  leadType: ["Lead Type", "Product", "Product Type", "Interest", "Coverage Type"],
+  source: ["Lead Source", "Source", "source"],
+  campaign: ["Campaign", "Campaign Name", "campaign_name"],
+  businessName: ["Business Name", "Company", "Company Name"],
+  dob: ["DOB", "Date of Birth", "Birthdate"],
+  notes: ["Notes", "Note", "Comments", "Description"],
+};
+
+function inferProductLineFromLeadType(leadType = "") {
+  const normalized = String(leadType || "").trim().toLowerCase();
+  if (!normalized) return "Health";
+  if (
+    normalized.includes("life")
+    || normalized.includes("iul")
+    || normalized.includes("final expense")
+    || normalized.includes("mortgage")
+    || normalized.includes("term")
+  ) {
+    return "Life";
+  }
+  if (
+    normalized.includes("medicare")
+    || normalized.includes("health")
+    || normalized.includes("aca")
+    || normalized.includes("under 65")
+  ) {
+    return "Health";
+  }
+  return "Health";
+}
+
+function mapGenericLeadRowsToDashboardLeads(rows) {
+  const headers = Object.keys(rows[0] || {});
+  const fullNameHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.fullName);
+  const firstNameHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.firstName);
+  const lastNameHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.lastName);
+  const phoneHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.phone);
+  const emailHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.email);
+  const stateHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.state);
+  const leadIdHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.leadId);
+  const leadTypeHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.leadType);
+  const sourceHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.source);
+  const campaignHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.campaign);
+  const businessNameHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.businessName);
+  const dobHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.dob);
+  const notesHeader = findHeaderAlias(headers, GENERIC_IMPORT_ALIASES.notes);
+
+  return rows.map((row, index) => {
+    const fullName = fullNameHeader
+      ? String(row[fullNameHeader] || "").trim()
+      : "";
+    const firstNameValue = firstNameHeader ? String(row[firstNameHeader] || "").trim() : "";
+    const lastNameValue = lastNameHeader ? String(row[lastNameHeader] || "").trim() : "";
+    const splitName = splitFullName(fullName);
+    const firstName = firstNameValue || splitName.firstName;
+    const lastName = lastNameValue || splitName.lastName;
+    const leadType = leadTypeHeader ? String(row[leadTypeHeader] || "").trim() : "";
+    const source = sourceHeader ? String(row[sourceHeader] || "").trim() : "generic_import";
+    const campaign = campaignHeader ? String(row[campaignHeader] || "").trim() : "Imported Leads";
+    const stateValue = stateHeader ? String(row[stateHeader] || "").trim() : "";
+    const productLine = inferProductLineFromLeadType(leadType);
+    const combinedNotes = [
+      notesHeader ? String(row[notesHeader] || "").trim() : "",
+      dobHeader ? String(row[dobHeader] || "").trim() ? `DOB: ${String(row[dobHeader] || "").trim()}` : "" : "",
+      stateValue ? `State: ${stateValue}` : "",
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    return {
+      lead_external_id: leadIdHeader ? String(row[leadIdHeader] || "").trim() || `GENERIC-UPLOAD-${index + 1}` : `GENERIC-UPLOAD-${index + 1}`,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName || `${firstName} ${lastName}`.trim(),
+      email: emailHeader ? String(row[emailHeader] || "").trim() : "",
+      mobile_phone: phoneHeader ? String(row[phoneHeader] || "").trim() : "",
+      business_name: businessNameHeader ? String(row[businessNameHeader] || "").trim() : "",
+      lead_source: source || "generic_import",
+      lead_source_detail: leadType || "generic_csv_import",
+      campaign_name: campaign,
+      product_interest: leadType.toLowerCase() || productLine.toLowerCase(),
+      product_line: productLine,
+      owner_queue: "intake_queue",
+      lead_status: "new",
+      booking_status: "not_started",
+      consent_status: "review_required",
+      consent_channel_sms: "",
+      consent_channel_email: "",
+      consent_channel_whatsapp: "",
+      dnc_status: "pending_check",
+      contact_eligibility: "review_required",
+      created_at_source: "",
+      last_activity_at_source: "",
+      notes: combinedNotes,
+      raw_tags: "",
+      raw_created: "",
+      raw_last_activity: "",
+      routing_bucket: "intake_queue",
+      suppress_reason: "",
+      recommended_channel: "manual_review",
+      sequence_name: "generic_manual_review",
+      recommended_next_action: `review ${productLine.toLowerCase()} options and contact lead`,
+      priority_tier: "normal",
+      state: stateValue,
+    };
+  });
+}
+
+function mapClosrLeadsRowsToDashboardLeads(rows) {
+  return rows.map((row, index) => {
+    const fullName = String(row["Full Name"] || "").trim();
+    const { firstName, lastName } = splitFullName(fullName);
+    const leadType = String(row["Lead Type"] || "").trim();
+    const productLine = inferProductLineFromLeadType(leadType);
+    const stateValue = String(row.State || row.state || "").trim();
+    const notes = [
+      stateValue ? `State: ${stateValue}` : "",
+      String(row.DOB || "").trim() ? `DOB: ${String(row.DOB || "").trim()}` : "",
+      String(row["Update sheet"] || "").trim() ? `Update Sheet: ${String(row["Update sheet"] || "").trim()}` : "",
+    ]
+      .filter(Boolean)
+      .join(" | ");
+
+    return {
+      lead_external_id: String(row["Lead ID"] || "").trim() || `CLOSRLEADS-UPLOAD-${index + 1}`,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName || `${firstName} ${lastName}`.trim(),
+      email: String(row.Email || "").trim(),
+      mobile_phone: String(row["Phone Number"] || "").trim(),
+      business_name: "",
+      lead_source: "closrleads",
+      lead_source_detail: leadType || "closrleads_import",
+      campaign_name: "ClosrLeads Upload",
+      product_interest: leadType.toLowerCase() || productLine.toLowerCase(),
+      product_line: productLine,
+      owner_queue: "intake_queue",
+      lead_status: "new",
+      booking_status: "not_started",
+      consent_status: "review_required",
+      consent_channel_sms: "",
+      consent_channel_email: "",
+      consent_channel_whatsapp: "",
+      dnc_status: "pending_check",
+      contact_eligibility: "review_required",
+      created_at_source: "",
+      last_activity_at_source: "",
+      notes,
+      raw_tags: "",
+      raw_created: "",
+      raw_last_activity: "",
+      routing_bucket: "intake_queue",
+      suppress_reason: "",
+      recommended_channel: "manual_review",
+      sequence_name: "closrleads_manual_review",
+      recommended_next_action: `review ${productLine.toLowerCase()} options and contact lead`,
+      priority_tier: "normal",
+      state: stateValue,
+    };
+  });
+}
+
 function detectLeadFormat(rows) {
   const headers = Object.keys(rows[0] || {});
   if (headers.includes("lead_external_id")) return "dashboard";
   if (headers.includes("Contact Id") && headers.includes("First Name")) return "lena";
+  if (headers.includes("Full Name") && headers.includes("Phone Number") && headers.includes("Lead ID")) return "closrleads";
+  const hasPhone = hasHeaderAlias(headers, GENERIC_IMPORT_ALIASES.phone);
+  const hasName = hasHeaderAlias(headers, GENERIC_IMPORT_ALIASES.fullName)
+    || (
+      hasHeaderAlias(headers, GENERIC_IMPORT_ALIASES.firstName)
+      && hasHeaderAlias(headers, GENERIC_IMPORT_ALIASES.lastName)
+    );
+  if (hasPhone && hasName) return "generic";
   return "unknown";
 }
 
@@ -1032,7 +1631,7 @@ async function importUploadedLeadsToLocalDb(withCleanup = false) {
     setUploadStatus("Upload a CSV first, then import.", "error");
     return;
   }
-  if (!LOCAL_DB_IMPORT_URL.trim()) {
+  if (!supabase && !LOCAL_DB_IMPORT_URL.trim()) {
     setUploadStatus("Local DB import URL is not configured.", "error");
     return;
   }
@@ -1048,25 +1647,30 @@ async function importUploadedLeadsToLocalDb(withCleanup = false) {
       : "Importing leads to master DB...",
   );
   try {
-    const response = await fetch(LOCAL_DB_IMPORT_URL, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        rows: rows.map((row) => {
-          const payload = { ...row };
-          delete payload.__uploadInvalidPhone;
-          delete payload.__uploadRowIndex;
-          return payload;
-        }),
-        withCleanup,
-      }),
+    const cleanedRows = rows.map((row) => {
+      const payload = { ...row };
+      delete payload.__uploadInvalidPhone;
+      delete payload.__uploadRowIndex;
+      return payload;
     });
-    if (!response.ok) {
-      throw new Error(`Import failed (${response.status})`);
-    }
-    const result = await response.json();
+    const result = supabase
+      ? await upsertLeadRowsToSupabase(cleanedRows)
+      : await (async () => {
+          const response = await fetch(LOCAL_DB_IMPORT_URL, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              rows: cleanedRows,
+              withCleanup,
+            }),
+          });
+          if (!response.ok) {
+            throw new Error(`Import failed (${response.status})`);
+          }
+          return await response.json();
+        })();
     const added = Number(result?.added || 0);
     const skipped = Number(result?.skipped_existing || 0);
     const invalid = Number(result?.skipped_invalid || 0);
@@ -1077,6 +1681,18 @@ async function importUploadedLeadsToLocalDb(withCleanup = false) {
         : `Import complete. Added ${formatNumber.format(added)}, skipped ${formatNumber.format(skipped)}, invalid ${formatNumber.format(invalid)}.`,
       "success",
     );
+    if (supabase) {
+      const refreshedLeads = await loadLeadRowsFromSupabase();
+      renderDashboard({
+        leads: refreshedLeads || [],
+        activity: state.activity,
+        bookings: state.bookings,
+        sales: state.sales,
+        targets: state.targets,
+        sourcedLeads: state.sourcedLeads,
+        carrierDocs: state.carrierDocs,
+      });
+    }
   } catch (error) {
     setUploadStatus(String(error.message || error), "error");
   } finally {
@@ -1100,10 +1716,16 @@ async function handleLeadUploadFromFileInput(event) {
     if (detectedFormat === "lena") {
       leads = mapLenaRowsToDashboardLeads(parsedRows);
       formatLabel = "Lena";
+    } else if (detectedFormat === "closrleads") {
+      leads = mapClosrLeadsRowsToDashboardLeads(parsedRows);
+      formatLabel = "ClosrLeads";
+    } else if (detectedFormat === "generic") {
+      leads = mapGenericLeadRowsToDashboardLeads(parsedRows);
+      formatLabel = "Generic";
     } else if (detectedFormat === "dashboard") {
       formatLabel = "dashboard";
     } else {
-      throw new Error("Unsupported CSV format. Upload a Lena lead file or dashboard lead export.");
+      throw new Error("Unsupported CSV format. Upload a Lena lead file, ClosrLeads export, dashboard lead export, or a CSV with recognizable name and phone columns.");
     }
 
     const cleanedUpload = sanitizeLeadRows(leads);
@@ -1394,11 +2016,21 @@ async function refreshTodaysAppointments() {
   const statusEl = document.getElementById("todayAppointmentsStatus");
   if (statusEl) statusEl.textContent = "Loading...";
   try {
-    if (!LOCAL_DB_CALENDAR_TODAY_URL.trim()) throw new Error("Calendar endpoint not configured");
-    const response = await fetch(LOCAL_DB_CALENDAR_TODAY_URL, { method: "GET" });
-    if (!response.ok) throw new Error(`Calendar fetch failed (${response.status})`);
-    const data = await response.json();
-    const items = Array.isArray(data?.items) ? data.items : [];
+    let items = [];
+    if (supabase) {
+      const appointmentRows = await loadAppointmentsFromSupabase({
+        start: startOfDayIso(0),
+        end: endOfDayIso(0),
+        limit: 100,
+      });
+      items = appointmentRows.map((row) => buildCalendarEventFromAppointment(row));
+    } else {
+      if (!LOCAL_DB_CALENDAR_TODAY_URL.trim()) throw new Error("Calendar endpoint not configured");
+      const response = await fetch(LOCAL_DB_CALENDAR_TODAY_URL, { method: "GET" });
+      if (!response.ok) throw new Error(`Calendar fetch failed (${response.status})`);
+      const data = await response.json();
+      items = Array.isArray(data?.items) ? data.items : [];
+    }
     state.todayAppointments = items;
     renderTodaysAppointments(items);
   } catch (error) {
@@ -1518,16 +2150,33 @@ async function refreshCalendarTabData() {
   const statusEl = document.getElementById("calendarStatus");
   if (statusEl) statusEl.textContent = "Loading...";
   try {
-    const [todayResp, weekResp] = await Promise.all([
-      fetch(LOCAL_DB_CALENDAR_TODAY_URL, { method: "GET" }),
-      fetch(LOCAL_DB_CALENDAR_WEEK_URL, { method: "GET" }),
-    ]);
-    if (!todayResp.ok) throw new Error(`Today fetch failed (${todayResp.status})`);
-    if (!weekResp.ok) throw new Error(`Week fetch failed (${weekResp.status})`);
-    const todayData = await todayResp.json();
-    const weekData = await weekResp.json();
-    state.calendarTodayEvents = Array.isArray(todayData?.items) ? todayData.items : [];
-    state.calendarWeekEvents = Array.isArray(weekData?.items) ? weekData.items : [];
+    if (supabase) {
+      const [todayRows, weekRows] = await Promise.all([
+        loadAppointmentsFromSupabase({
+          start: startOfDayIso(0),
+          end: endOfDayIso(0),
+          limit: 100,
+        }),
+        loadAppointmentsFromSupabase({
+          start: startOfDayIso(0),
+          end: endOfDayIso(7),
+          limit: 300,
+        }),
+      ]);
+      state.calendarTodayEvents = todayRows.map((row) => buildCalendarEventFromAppointment(row));
+      state.calendarWeekEvents = weekRows.map((row) => buildCalendarEventFromAppointment(row));
+    } else {
+      const [todayResp, weekResp] = await Promise.all([
+        fetch(LOCAL_DB_CALENDAR_TODAY_URL, { method: "GET" }),
+        fetch(LOCAL_DB_CALENDAR_WEEK_URL, { method: "GET" }),
+      ]);
+      if (!todayResp.ok) throw new Error(`Today fetch failed (${todayResp.status})`);
+      if (!weekResp.ok) throw new Error(`Week fetch failed (${weekResp.status})`);
+      const todayData = await todayResp.json();
+      const weekData = await weekResp.json();
+      state.calendarTodayEvents = Array.isArray(todayData?.items) ? todayData.items : [];
+      state.calendarWeekEvents = Array.isArray(weekData?.items) ? weekData.items : [];
+    }
     renderCalendarTab();
     if (statusEl) {
       statusEl.textContent = `Updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
@@ -2891,7 +3540,9 @@ async function persistActionCardWritingNumber() {
   saveCarrierConfigsToStorage(next);
 
   try {
-    if (LOCAL_DB_CARRIER_CONFIG_URL.trim()) {
+    if (supabase) {
+      await saveCarrierConfigsToSupabase(next);
+    } else if (LOCAL_DB_CARRIER_CONFIG_URL.trim()) {
       await fetch(LOCAL_DB_CARRIER_CONFIG_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2940,7 +3591,13 @@ function renderCarrierSettingsRows() {
 
 async function loadCarrierConfigs() {
   let configs = [];
-  if (LOCAL_DB_CARRIER_CONFIG_URL.trim()) {
+  if (supabase) {
+    try {
+      configs = await loadCarrierConfigsFromSupabase();
+    } catch {
+      // Fall back to local storage.
+    }
+  } else if (LOCAL_DB_CARRIER_CONFIG_URL.trim()) {
     try {
       const response = await fetch(LOCAL_DB_CARRIER_CONFIG_URL, { method: "GET" });
       if (response.ok) {
@@ -2974,7 +3631,9 @@ async function saveCarrierConfigs() {
 
   if (statusEl) statusEl.textContent = "Saving...";
   try {
-    if (LOCAL_DB_CARRIER_CONFIG_URL.trim()) {
+    if (supabase) {
+      await saveCarrierConfigsToSupabase(rows);
+    } else if (LOCAL_DB_CARRIER_CONFIG_URL.trim()) {
       await fetch(LOCAL_DB_CARRIER_CONFIG_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -2984,7 +3643,7 @@ async function saveCarrierConfigs() {
     if (statusEl) statusEl.textContent = "Saved";
   } catch (error) {
     console.error(error);
-    if (statusEl) statusEl.textContent = "Saved locally (API unavailable)";
+    if (statusEl) statusEl.textContent = supabase ? "Saved locally (Supabase unavailable)" : "Saved locally (API unavailable)";
   }
   renderCarrierActionCard();
 }
@@ -2992,21 +3651,41 @@ async function saveCarrierConfigs() {
 function attachCarrierSettingsHandlers() {
   const modal = document.getElementById("carrierSettingsModal");
   const openBtn = document.getElementById("carrierSettingsBtn");
+  const deskOpenBtn = document.getElementById("deskOpenCarrierSettingsBtn");
   const closeBtn = document.getElementById("carrierSettingsCloseBtn");
+  const closeBtnFloating = document.getElementById("carrierSettingsCloseBtnFloating");
   const saveBtn = document.getElementById("carrierSettingsSaveBtn");
-  if (!modal || !openBtn || !closeBtn || !saveBtn) return;
+  const saveBtnTop = document.getElementById("carrierSettingsSaveBtnTop");
+  const saveBtnFloating = document.getElementById("carrierSettingsSaveBtnFloating");
+  if (!modal || !closeBtn || !saveBtn) return;
 
-  openBtn.addEventListener("click", () => {
+  const openModal = () => {
     renderCarrierSettingsRows();
     modal.hidden = false;
-  });
+    window.requestAnimationFrame(() => {
+      modal.scrollTop = 0;
+      const card = modal.querySelector(".carrier-settings-modal");
+      if (card) card.scrollTop = 0;
+    });
+  };
+  openBtn?.addEventListener("click", openModal);
+  deskOpenBtn?.addEventListener("click", openModal);
   closeBtn.addEventListener("click", () => {
+    modal.hidden = true;
+  });
+  closeBtnFloating?.addEventListener("click", () => {
     modal.hidden = true;
   });
   modal.addEventListener("click", (event) => {
     if (event.target === modal) modal.hidden = true;
   });
   saveBtn.addEventListener("click", async () => {
+    await saveCarrierConfigs();
+  });
+  saveBtnTop?.addEventListener("click", async () => {
+    await saveCarrierConfigs();
+  });
+  saveBtnFloating?.addEventListener("click", async () => {
     await saveCarrierConfigs();
   });
 
@@ -6314,7 +6993,9 @@ function pipelineStageLabel(stage) {
 }
 
 async function persistPipelineStatus(lead, stage) {
-  if (!lead || !LOCAL_DB_LEAD_BASE_URL.trim()) return true;
+  if (!lead) return true;
+  if (supabase) return updateLeadPipelineInSupabase(lead, stage);
+  if (!LOCAL_DB_LEAD_BASE_URL.trim()) return true;
   const payload = {
     contactId: String(lead.lead_external_id || "").trim(),
     firstName: String(lead.first_name || "").trim(),
@@ -6366,12 +7047,16 @@ async function handleLaunchPortal() {
   if (!leadId || !portalUrl) return;
 
   try {
-    const response = await fetch(`${LOCAL_DB_LEAD_BASE_URL}/${encodeURIComponent(leadId)}/pipeline`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status: "App Submitted" }),
-    });
-    if (!response.ok) throw new Error(`Pipeline update failed (${response.status})`);
+    if (supabase) {
+      await updateLeadPipelineInSupabase({ lead_external_id: leadId }, "app_submitted");
+    } else {
+      const response = await fetch(`${LOCAL_DB_LEAD_BASE_URL}/${encodeURIComponent(leadId)}/pipeline`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "App Submitted" }),
+      });
+      if (!response.ok) throw new Error(`Pipeline update failed (${response.status})`);
+    }
     const lead = state.leads.find((row) => String(row.lead_external_id || "") === leadId);
     if (lead) lead.pipeline_status = "app_submitted";
     const created = state.createdLeads.find((row) => String(row.lead_external_id || "") === leadId);
@@ -6595,16 +7280,22 @@ function restoreActiveSessionForLead(leadId) {
 
 async function markLeadAsOpened(leadId) {
   const id = String(leadId || "").trim();
-  if (!id || !LEAD_OPEN_LEASE_URL.trim()) return;
+  if (!id) return;
   try {
-    const response = await fetch(`${LEAD_OPEN_LEASE_URL}/${encodeURIComponent(id)}/open`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openedAt: new Date().toISOString() }),
-    });
-    if (!response.ok) return;
-    const data = await response.json().catch(() => ({}));
-    const openedAt = String(data?.last_opened_at || new Date().toISOString());
+    const openedAt = supabase
+      ? await markLeadOpenedInSupabase(id)
+      : await (async () => {
+          if (!LEAD_OPEN_LEASE_URL.trim()) return null;
+          const response = await fetch(`${LEAD_OPEN_LEASE_URL}/${encodeURIComponent(id)}/open`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ openedAt: new Date().toISOString() }),
+          });
+          if (!response.ok) return null;
+          const data = await response.json().catch(() => ({}));
+          return String(data?.last_opened_at || new Date().toISOString());
+        })();
+    if (!openedAt) return;
     const lead = state.leads.find((row) => String(row.lead_external_id || "") === id);
     if (lead) lead.last_opened_at = openedAt;
     const created = state.createdLeads.find((row) => String(row.lead_external_id || "") === id);
@@ -6678,25 +7369,37 @@ async function saveLeadData() {
       throw new Error("Follow-up date/time is required to sync calendar.");
     }
     if (shouldSchedule && followUpAt) {
-      if (!LOCAL_DB_CALENDAR_SCHEDULE_URL.trim()) {
-        throw new Error("Calendar scheduling endpoint is not configured.");
-      }
-      const scheduleResponse = await fetch(LOCAL_DB_CALENDAR_SCHEDULE_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contactId: payload.contactId,
-          clientName: clientName,
-          email: lead.email || "",
-          phone: lead.phone || "",
-          scheduledAt: followUpAt,
-          description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
-        }),
-      });
-      if (!scheduleResponse.ok) {
-        throw new Error(`Calendar schedule failed (${scheduleResponse.status})`);
-      }
-      const scheduleData = await scheduleResponse.json();
+      const scheduleData = supabase
+        ? await scheduleAppointmentInSupabase({
+            contactId: payload.contactId,
+            clientName,
+            email: lead.email || "",
+            phone: lead.phone || "",
+            scheduledAt: followUpAt,
+            description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
+            disposition: currentDisposition,
+          })
+        : await (async () => {
+            if (!LOCAL_DB_CALENDAR_SCHEDULE_URL.trim()) {
+              throw new Error("Calendar scheduling endpoint is not configured.");
+            }
+            const scheduleResponse = await fetch(LOCAL_DB_CALENDAR_SCHEDULE_URL, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                contactId: payload.contactId,
+                clientName: clientName,
+                email: lead.email || "",
+                phone: lead.phone || "",
+                scheduledAt: followUpAt,
+                description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
+              }),
+            });
+            if (!scheduleResponse.ok) {
+              throw new Error(`Calendar schedule failed (${scheduleResponse.status})`);
+            }
+            return await scheduleResponse.json();
+          })();
       if (!scheduleData?.ok) {
         throw new Error(String(scheduleData?.error || "Calendar schedule failed"));
       }
@@ -6714,7 +7417,9 @@ async function saveLeadData() {
         body: JSON.stringify(payload),
       });
     }
-    if (LOCAL_DB_SYNC_URL.trim()) {
+    if (supabase) {
+      await saveLeadToSupabase(payload);
+    } else if (LOCAL_DB_SYNC_URL.trim()) {
       const localResponse = await fetch(LOCAL_DB_SYNC_URL, {
         method: "POST",
         headers: {
@@ -6728,11 +7433,22 @@ async function saveLeadData() {
     }
     applySavedPayloadToLeadState(payload);
     // With no-cors, response is opaque; if no error is thrown, treat as success.
-    if (statusEl) statusEl.textContent = "Data synced successfully.";
+    if (statusEl) {
+      statusEl.textContent = shouldSchedule && supabase
+        ? "Saved and scheduled in portal."
+        : "Data synced successfully.";
+    }
     setSaveStatus("success");
+    if (shouldSchedule && supabase) {
+      refreshTodaysAppointments().catch(() => {});
+      refreshCalendarTabData().catch(() => {});
+    }
     clearActiveSession();
     window.setTimeout(() => {
-      if (statusEl && statusEl.textContent === "Data synced successfully.") statusEl.textContent = "Ready";
+      if (
+        statusEl
+        && (statusEl.textContent === "Data synced successfully." || statusEl.textContent === "Saved and scheduled in portal.")
+      ) statusEl.textContent = "Ready";
       if (state.ui.saveStatus === "success") setSaveStatus("idle");
     }, 3000);
     return true;
@@ -7365,9 +8081,11 @@ async function clearTestData() {
 }
 
 async function initialize() {
+  if (hasInitialized) return;
+  hasInitialized = true;
   try {
     const [leads, activity, bookings, sales, targets, sourcedLeads, carrierDocs, carrierGrid] = await Promise.all([
-      loadCsv(DATA_FILES.leads),
+      supabase ? loadLeadRowsFromSupabase() : loadCsv(DATA_FILES.leads),
       loadCsv(DATA_FILES.activity).catch(() => []),
       loadCsv(DATA_FILES.bookings).catch(() => []),
       loadCsv(DATA_FILES.sales).catch(() => []),
@@ -7388,6 +8106,40 @@ async function initialize() {
     document.getElementById("datasetStatus").textContent = String(error.message || error);
     document.getElementById("datasetStatus").style.background = "var(--red-soft)";
     document.getElementById("datasetStatus").style.color = "var(--red)";
+  }
+}
+
+async function bootstrapPortalAuth() {
+  setAuthLocked(true);
+  setAuthStatus("Checking session…");
+
+  const session = await ensureAuthenticatedSession();
+  if (session) {
+    setPortalUser(session);
+    setAuthLocked(false);
+    setAuthStatus("");
+    await initialize();
+  } else {
+    setPortalUser(null);
+    setAuthLocked(true);
+    if (!document.getElementById("authStatus")?.textContent) {
+      setAuthStatus("Sign in to open the portal.");
+    }
+  }
+
+  if (supabase) {
+    supabase.auth.onAuthStateChange(async (_event, sessionUpdate) => {
+      if (sessionUpdate) {
+        setPortalUser(sessionUpdate);
+        setAuthLocked(false);
+        setAuthStatus("");
+        await initialize();
+      } else {
+        setPortalUser(null);
+        setAuthLocked(true);
+        setAuthStatus("Signed out. Sign in to continue.");
+      }
+    });
   }
 }
 
@@ -7628,6 +8380,35 @@ document.getElementById("clearTestDataBtn")?.addEventListener("click", () => {
   clearTestData().catch(() => {});
 });
 
+document.getElementById("authForm")?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const email = document.getElementById("authEmail")?.value?.trim() || "";
+  const password = document.getElementById("authPassword")?.value || "";
+  const submitBtn = document.getElementById("authSubmitBtn");
+  if (!email || !password) {
+    setAuthStatus("Enter your email and password.", "error");
+    return;
+  }
+  if (submitBtn) submitBtn.disabled = true;
+  setAuthStatus("Signing in…");
+  try {
+    const session = await signInToPortal(email, password);
+    setPortalUser(session);
+    setAuthLocked(false);
+    setAuthStatus("");
+    await initialize();
+  } catch (error) {
+    setAuthLocked(true);
+    setAuthStatus(String(error.message || error), "error");
+  } finally {
+    if (submitBtn) submitBtn.disabled = false;
+  }
+});
+
+document.getElementById("portalLogoutBtn")?.addEventListener("click", async () => {
+  await signOutOfPortal();
+});
+
 attachFilterHandlers();
 attachCriteriaHandlers();
 attachTabHandlers();
@@ -7643,4 +8424,4 @@ syncWorkflowControls();
 renderCallDeskBranching();
 renderWorkflowAdvisor();
 setActiveTab("calldesk");
-initialize();
+bootstrapPortalAuth();

@@ -466,14 +466,9 @@
         window.dataLayer.push({ event: name, ...props });
       }
 
-      const PUBLIC_INTAKE_ENDPOINT =
-        window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost"
-        ? "http://127.0.0.1:8787/api/public/intake"
-        : "https://script.google.com/macros/s/AKfycbzlV2CFwUdCT3NGOE_MskTodKs7flQ-ve2jdMu__GtGochXvofUL-fwvghZMblkjfFU/exec";
-
-      function isGoogleEndpoint(url) {
-        return url.includes("script.google.com/macros");
-      }
+      const SUPABASE_URL = "https://ixpdvxumkloytwfezmga.supabase.co";
+      const SUPABASE_PUBLISHABLE_KEY = "sb_publishable_b3eTZFC0Alt2H-49ZTIaiA__K5DidT5";
+      const PUBLIC_INTAKE_ENDPOINT = `${SUPABASE_URL}/rest/v1/rpc/public_submit_intake`;
 
       function setFormStatus(form, message, tone) {
         const statusMap = {
@@ -496,30 +491,26 @@
         setFormStatus(form, "Sending your request...", "");
 
         try {
-          let result = { ok: true };
-          if (isGoogleEndpoint(PUBLIC_INTAKE_ENDPOINT)) {
-            const body = new URLSearchParams();
-            Object.entries(payload).forEach(([key, value]) => {
-              body.set(key, value ?? "");
-            });
-            await fetch(PUBLIC_INTAKE_ENDPOINT, {
-              method: "POST",
-              mode: "no-cors",
-              body
-            });
-          } else {
-            const response = await fetch(PUBLIC_INTAKE_ENDPOINT, {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Accept: "application/json"
-              },
-              body: JSON.stringify(payload)
-            });
-            result = await response.json().catch(() => ({}));
-            if (!response.ok || !result.ok) {
-              throw new Error(result.error || `Request failed (${response.status})`);
-            }
+          const response = await fetch(PUBLIC_INTAKE_ENDPOINT, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Accept: "application/json",
+              apikey: SUPABASE_PUBLISHABLE_KEY
+            },
+            body: JSON.stringify({
+              p_source: payload.source || "consultation",
+              p_full_name: payload.fullName || "",
+              p_email: payload.email || "",
+              p_phone: payload.phone || "",
+              p_coverage_need: payload.coverageNeed || "",
+              p_preferred_time: payload.preferredTime || "",
+              p_message: payload.message || ""
+            })
+          });
+          const result = await response.json().catch(() => ({}));
+          if (!response.ok || !result.ok) {
+            throw new Error(result.message || result.error || `Request failed (${response.status})`);
           }
           form.reset();
           if (form.id === "consultForm") {
