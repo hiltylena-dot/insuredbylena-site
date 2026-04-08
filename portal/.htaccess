@@ -2,5 +2,5 @@ Options -Indexes
 
 AuthType Basic
 AuthName "Insured by Lena Admin"
-AuthUserFile /home/insubhmy/portal-auth/.htpasswd
+AuthUserFile /home/lenahilty/portal-auth/.htpasswd
 Require valid-user
