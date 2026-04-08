@@ -2295,16 +2295,28 @@ button:disabled:hover,
   margin-left: 8px;
 }
 
+.calldesk-form .sync-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid rgba(148, 163, 184, 0.24);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.88);
+}
+
 .calldesk-form label.sync-toggle {
   display: inline-flex !important;
   align-items: center;
   gap: 12px;
   cursor: pointer;
   width: fit-content;
-  padding: 6px 10px;
-  border: 1px solid rgba(148, 163, 184, 0.24);
-  border-radius: 10px;
-  background: rgba(255, 255, 255, 0.75);
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
 }
 
 .calldesk-form label.sync-toggle .sync-toggle-copy {
@@ -2327,21 +2339,21 @@ button:disabled:hover,
   cursor: pointer;
 }
 
-.calldesk-form label.sync-toggle .sync-toggle-state {
+.calldesk-form .sync-toggle-state {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-width: 40px;
-  padding: 3px 8px;
+  min-width: 52px;
+  padding: 5px 10px;
   border-radius: 999px;
   background: rgba(37, 99, 235, 0.14);
   color: #1d4ed8;
-  font-size: 0.72rem;
+  font-size: 0.76rem;
   font-weight: 800;
   letter-spacing: 0.08em;
 }
 
-.calldesk-form label.sync-toggle .sync-toggle-state.is-off {
+.calldesk-form .sync-toggle-state.is-off {
   background: rgba(148, 163, 184, 0.16);
   color: #475569;
 }
