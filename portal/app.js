@@ -560,9 +560,22 @@ async function createGoogleCalendarEvent({
       durationMinutes,
     }),
   });
-  const data = await response.json().catch(() => ({}));
+  const responseText = await response.text().catch(() => "");
+  const data = (() => {
+    try {
+      return responseText ? JSON.parse(responseText) : {};
+    } catch (_error) {
+      return {};
+    }
+  })();
   if (!response.ok || !data?.ok) {
-    throw new Error(String(data?.error || `Google Calendar sync failed (${response.status})`));
+    throw new Error(
+      String(
+        data?.error
+          || (responseText && responseText.length < 200 ? responseText : "")
+          || `Google Calendar sync failed (${response.status})`,
+      ),
+    );
   }
   return data;
 }
@@ -7404,18 +7417,28 @@ async function saveLeadData() {
   state.ui.isSaving = true;
   try {
     const shouldSchedule = syncViaGog && ["callback", "follow_up"].includes(currentDisposition);
+    let calendarWarning = "";
     if (shouldSchedule && !followUpAt) {
       throw new Error("Follow-up date/time is required to sync calendar.");
     }
     if (shouldSchedule && followUpAt) {
-      const googleScheduleData = await createGoogleCalendarEvent({
-        clientName,
-        email: lead.email || "",
-        phone: lead.phone || "",
-        scheduledAt: followUpAt,
-        description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
-        durationMinutes: 30,
-      });
+      let googleScheduleData = {
+        ok: false,
+        calendarEventId: "",
+        nextAppointmentTime: followUpAt,
+      };
+      try {
+        googleScheduleData = await createGoogleCalendarEvent({
+          clientName,
+          email: lead.email || "",
+          phone: lead.phone || "",
+          scheduledAt: followUpAt,
+          description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
+          durationMinutes: 30,
+        });
+      } catch (calendarError) {
+        calendarWarning = String(calendarError?.message || "Google Calendar sync failed.");
+      }
       const scheduleData = supabase
         ? await scheduleAppointmentInSupabase({
             contactId: payload.contactId,
@@ -7481,9 +7504,13 @@ async function saveLeadData() {
     applySavedPayloadToLeadState(payload);
     // With no-cors, response is opaque; if no error is thrown, treat as success.
     if (statusEl) {
-      statusEl.textContent = shouldSchedule && supabase
-        ? "Saved and scheduled in portal."
-        : "Data synced successfully.";
+      if (shouldSchedule && supabase && calendarWarning) {
+        statusEl.textContent = "Saved in portal. Google Calendar sync needs attention.";
+      } else {
+        statusEl.textContent = shouldSchedule && supabase
+          ? "Saved and scheduled in portal."
+          : "Data synced successfully.";
+      }
     }
     setSaveStatus("success");
     if (shouldSchedule && supabase) {
@@ -7501,7 +7528,7 @@ async function saveLeadData() {
     return true;
   } catch (error) {
     console.error("Save failed:", error);
-    if (statusEl) statusEl.textContent = "Sync failed. Try again.";
+    if (statusEl) statusEl.textContent = String(error?.message || "Sync failed. Try again.");
     setSaveStatus("error");
     window.setTimeout(() => {
       if (state.ui.saveStatus === "error") setSaveStatus("idle");
