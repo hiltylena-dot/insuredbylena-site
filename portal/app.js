@@ -445,6 +445,22 @@ function buildCalendarEventFromAppointment(row = {}) {
   };
 }
 
+function buildCalendarEventFromLead(lead = {}) {
+  const start = String(lead.next_appointment_time || "").trim();
+  const fullName = String(lead.full_name || `${lead.first_name || ""} ${lead.last_name || ""}`).trim() || "Lead";
+  const disposition = String(lead.disposition || "").trim().toLowerCase();
+  const label = disposition === "callback" ? "Callback" : "Follow-up";
+  return {
+    summary: `${label}: ${fullName}`,
+    start,
+    htmlLink: "",
+    source: "lead_master",
+    lead_id: Number(lead.lead_id || 0) || 0,
+    lead_external_id: String(lead.lead_external_id || "").trim(),
+    attendees: lead.email ? [{ email: String(lead.email || "").trim() }] : [],
+  };
+}
+
 function dedupeCalendarEvents(items = []) {
   const seen = new Map();
   for (const item of Array.isArray(items) ? items : []) {
@@ -2126,12 +2142,14 @@ async function refreshTodaysAppointments() {
   try {
     let items = [];
     if (supabase) {
-      const appointmentRows = await loadAppointmentsFromSupabase({
-        start: startOfDayIso(0),
-        end: endOfDayIso(0),
-        limit: 100,
-      });
-      items = appointmentRows.map((row) => buildCalendarEventFromAppointment(row));
+      const todayStart = Date.parse(startOfDayIso(0));
+      const todayEnd = Date.parse(endOfDayIso(0));
+      items = state.leads
+        .filter((lead) => {
+          const ts = Date.parse(String(lead?.next_appointment_time || ""));
+          return Number.isFinite(ts) && ts >= todayStart && ts <= todayEnd;
+        })
+        .map((lead) => buildCalendarEventFromLead(lead));
     } else {
       if (!LOCAL_DB_CALENDAR_TODAY_URL.trim()) throw new Error("Calendar endpoint not configured");
       const response = await fetch(LOCAL_DB_CALENDAR_TODAY_URL, { method: "GET" });
@@ -2272,20 +2290,22 @@ async function refreshCalendarTabData() {
   if (statusEl) statusEl.textContent = "Loading...";
   try {
     if (supabase) {
-      const [todayRows, weekRows] = await Promise.all([
-        loadAppointmentsFromSupabase({
-          start: startOfDayIso(0),
-          end: endOfDayIso(0),
-          limit: 100,
-        }),
-        loadAppointmentsFromSupabase({
-          start: startOfDayIso(0),
-          end: endOfDayIso(30),
-          limit: 500,
-        }),
-      ]);
-      state.calendarTodayEvents = todayRows.map((row) => buildCalendarEventFromAppointment(row));
-      state.calendarWeekEvents = weekRows.map((row) => buildCalendarEventFromAppointment(row));
+      const todayStart = Date.parse(startOfDayIso(0));
+      const todayEnd = Date.parse(endOfDayIso(0));
+      const monthEnd = Date.parse(endOfDayIso(30));
+      const scheduledLeads = state.leads.filter((lead) => String(lead?.next_appointment_time || "").trim());
+      state.calendarTodayEvents = scheduledLeads
+        .filter((lead) => {
+          const ts = Date.parse(String(lead?.next_appointment_time || ""));
+          return Number.isFinite(ts) && ts >= todayStart && ts <= todayEnd;
+        })
+        .map((lead) => buildCalendarEventFromLead(lead));
+      state.calendarWeekEvents = scheduledLeads
+        .filter((lead) => {
+          const ts = Date.parse(String(lead?.next_appointment_time || ""));
+          return Number.isFinite(ts) && ts >= todayStart && ts <= monthEnd;
+        })
+        .map((lead) => buildCalendarEventFromLead(lead));
     } else {
       const [todayResp, weekResp] = await Promise.all([
         fetch(LOCAL_DB_CALENDAR_TODAY_URL, { method: "GET" }),
