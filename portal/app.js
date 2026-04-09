@@ -7438,7 +7438,8 @@ async function saveLeadData() {
   state.ui.isSaving = true;
   try {
     const shouldSchedule = syncViaGog && ["callback", "follow_up"].includes(currentDisposition);
-    let syncWarning = "";
+    let portalScheduleWarning = "";
+    let googleCalendarWarning = "";
     if (supabase) {
       const savedLead = await saveLeadToSupabase(payload);
       if (savedLead?.lead_external_id) {
@@ -7447,7 +7448,7 @@ async function saveLeadData() {
     }
     if (shouldSchedule) {
       if (!followUpAt) {
-        syncWarning = "Saved in portal. Add a follow-up date/time to schedule.";
+        portalScheduleWarning = "Add a follow-up date/time to schedule.";
       } else {
         try {
           const scheduleData = supabase
@@ -7500,10 +7501,10 @@ async function saveLeadData() {
               googleScheduleData.calendarEventId || payload.calendarEventId || "",
             ).trim();
           } catch (calendarError) {
-            syncWarning = String(calendarError?.message || "Google Calendar sync failed.");
+            googleCalendarWarning = String(calendarError?.message || "Google Calendar sync failed.");
           }
         } catch (scheduleError) {
-          syncWarning = String(scheduleError?.message || "Scheduling failed after save.");
+          portalScheduleWarning = String(scheduleError?.message || "Scheduling failed after save.");
         }
       }
     }
@@ -7534,11 +7535,17 @@ async function saveLeadData() {
     // With no-cors, response is opaque; if no error is thrown, treat as success.
     let successButtonLabel = "Saved to CRM ✅";
     if (statusEl) {
-      if (shouldSchedule && syncWarning) {
-        statusEl.textContent = `Saved in portal. Google Calendar needs attention: ${syncWarning}`;
-        successButtonLabel = "Saved - scheduling needs attention";
+      if (shouldSchedule && portalScheduleWarning) {
+        statusEl.textContent = `Saved to CRM. Portal scheduling failed: ${portalScheduleWarning}`;
+        successButtonLabel = "Saved - portal scheduling failed";
         window.setTimeout(() => {
-          window.alert(`Google Calendar needs attention:\n\n${syncWarning}`);
+          window.alert(`Portal scheduling failed:\n\n${portalScheduleWarning}`);
+        }, 0);
+      } else if (shouldSchedule && googleCalendarWarning) {
+        statusEl.textContent = `Saved and scheduled in portal. Google Calendar needs attention: ${googleCalendarWarning}`;
+        successButtonLabel = "Saved - Google Calendar needs attention";
+        window.setTimeout(() => {
+          window.alert(`Google Calendar needs attention:\n\n${googleCalendarWarning}`);
         }, 0);
       } else {
         statusEl.textContent = shouldSchedule && supabase
