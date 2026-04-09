@@ -334,6 +334,162 @@
         transition: background-color 9999s ease-out 0s !important;
       }
 
+      @media (max-width: 768px) {
+        .main-panel {
+          height: auto !important;
+          min-height: calc(100vh - 60px) !important;
+          overflow: auto !important;
+          padding: 8px !important;
+        }
+
+        #callDeskTabPanel {
+          height: auto !important;
+          overflow: auto !important;
+          padding-bottom: 88px !important;
+        }
+
+        .calldesk-stage {
+          display: flex !important;
+          flex-direction: column !important;
+          gap: 10px !important;
+          height: auto !important;
+          max-height: none !important;
+          min-height: 0 !important;
+          padding: 0 !important;
+        }
+
+        .calldesk-column {
+          display: contents !important;
+          height: auto !important;
+          overflow: visible !important;
+        }
+
+        .client-snapshot-panel {
+          order: 1 !important;
+        }
+
+        .discovery-panel {
+          order: 2 !important;
+        }
+
+        .calldesk-readiness-widget {
+          order: 3 !important;
+        }
+
+        .wrapup-panel {
+          order: 4 !important;
+        }
+
+        #deskCarrierActionCard {
+          order: 5 !important;
+        }
+
+        .recommendation-panel {
+          display: none !important;
+        }
+
+        .mobile-secondary-field,
+        .dense-hide,
+        .wrapup-panel .calldesk-divider,
+        .wrapup-panel .calldesk-divider + .panel-header.compact,
+        #notesHistoryList,
+        #notesStatus {
+          display: none !important;
+        }
+
+        .calldesk-panel {
+          border-radius: 14px !important;
+          padding: 12px !important;
+        }
+
+        .calldesk-panel .panel-header.compact {
+          gap: 8px !important;
+          align-items: flex-start !important;
+        }
+
+        .calldesk-panel .panel-header.compact h3 {
+          font-size: 1rem !important;
+          line-height: 1.2 !important;
+        }
+
+        .detail-actions {
+          display: flex !important;
+          flex-wrap: wrap !important;
+          gap: 6px !important;
+        }
+
+        .detail-actions > * {
+          flex: 1 1 auto !important;
+          min-width: 0 !important;
+        }
+
+        .calldesk-form,
+        .workflow-form,
+        .discovery-group,
+        .discovery-split {
+          gap: 10px !important;
+        }
+
+        .discovery-split {
+          grid-template-columns: 1fr !important;
+        }
+
+        .discovery-group-title {
+          margin-bottom: 2px !important;
+          padding-bottom: 4px !important;
+          font-size: 0.62rem !important;
+        }
+
+        #callDeskTabPanel .calldesk-form input,
+        #callDeskTabPanel .calldesk-form select,
+        #callDeskTabPanel .calldesk-form textarea,
+        #callDeskTabPanel .workflow-form input,
+        #callDeskTabPanel .workflow-form select,
+        #callDeskTabPanel .workflow-form textarea {
+          min-height: 44px !important;
+          padding: 10px 12px !important;
+          font-size: 16px !important;
+        }
+
+        .client-snapshot-panel .calldesk-form,
+        .wrapup-panel .calldesk-form {
+          grid-template-columns: 1fr !important;
+        }
+
+        .notes-toolbar {
+          display: grid !important;
+          grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+          gap: 6px !important;
+        }
+
+        .notes-toolbar .ghost-button {
+          width: 100% !important;
+        }
+
+        #deskCallNotes {
+          min-height: 140px !important;
+          max-height: 220px !important;
+        }
+
+        #deskSaveToNotesBtn {
+          position: sticky !important;
+          bottom: 8px !important;
+          z-index: 8 !important;
+          box-shadow: 0 12px 30px rgba(0, 0, 0, 0.28) !important;
+          margin-top: 12px !important;
+        }
+
+        .script-drawer {
+          inset: auto 0 0 0 !important;
+          padding: 10px !important;
+        }
+
+        .script-drawer-card {
+          max-height: min(80vh, 680px) !important;
+          overflow: auto !important;
+        }
+      }
+
     </style>
   </head>
   <body>
@@ -1131,6 +1287,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260409-28"></script>
+    <script type="module" src="./app.js?v=20260409-30"></script>
   </body>
 </html>

@@ -21,6 +21,7 @@ const PORTAL_CONFIG = window.PORTAL_CONFIG || {};
 const SUPABASE_URL = String(PORTAL_CONFIG.supabaseUrl || "").trim();
 const SUPABASE_PUBLISHABLE_KEY = String(PORTAL_CONFIG.supabasePublishableKey || "").trim();
 const API_ORIGIN = String(PORTAL_CONFIG.apiBase || "").trim();
+const ENABLE_CONTENT_API = Boolean(PORTAL_CONFIG.enableContentApi && API_ORIGIN);
 const supabase =
   SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
     ? createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
@@ -98,6 +99,7 @@ const state = {
   auth: {
     profile: null,
     role: "guest",
+    sessionActive: false,
   },
 };
 
@@ -110,13 +112,17 @@ function normalizePortalRole(role) {
 function roleLabel(role) {
   const normalized = normalizePortalRole(role);
   if (normalized === "admin") return "Admin";
-  if (normalized === "approver") return "Approver";
-  if (normalized === "editor") return "Editor";
+  if (normalized === "approver") return "Team";
+  if (normalized === "editor") return "Team";
   return "Guest";
 }
 
+function hasPortalContentAccess() {
+  return Boolean(state.auth?.sessionActive);
+}
+
 function canEditContent() {
-  return ["admin", "approver", "editor"].includes(normalizePortalRole(state.auth?.role));
+  return ["admin", "editor", "approver"].includes(normalizePortalRole(state.auth?.role));
 }
 
 function canApproveContent() {
@@ -124,7 +130,7 @@ function canApproveContent() {
 }
 
 function canPublishContent() {
-  return normalizePortalRole(state.auth?.role) === "admin";
+  return ["admin"].includes(normalizePortalRole(state.auth?.role));
 }
 
 function getContentDraftOverride(postId) {
@@ -182,10 +188,6 @@ const OUTCOMES_STORAGE_KEY = "insurance-dashboard-call-outcomes";
 const CARRIER_CONFIGS_STORAGE_KEY = "insurance-dashboard-carrier-configs";
 const ACTIVE_SESSION_STORAGE_KEY = "openclaw_active_session";
 const LEAD_SELECTION_MAX_ROWS = 250;
-const GOOGLE_WEBHOOK_URL =
-  "https://script.google.com/macros/s/AKfycbxWyhM9FG7Jwd9iri4ppb0699ohLRGHMpdXFFp047B2FabnSUUzBEv0k7Vw-t0MA-3xpQ/exec";
-const GOOGLE_CALENDAR_WEB_APP_URL = "";
-const GOOGLE_CALENDAR_WEB_APP_SECRET = "Lvmh0509";
 const LOCAL_DB_SYNC_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/sync` : "";
 const LOCAL_DB_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/import` : "";
 const LOCAL_DB_LEAD_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads` : "";
@@ -200,8 +202,8 @@ const LOCAL_DB_CONTENT_POSTS_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/conten
 const LOCAL_DB_CONTENT_POSTS_IMPORT_BUFFER_CURRENT_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/posts/import-buffer-current` : "";
 const LOCAL_DB_CONTENT_PUBLISH_RUN_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/publish/run` : "";
 const LOCAL_DB_CONTENT_PUBLISH_JOBS_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/publish/jobs` : "";
-const GOOGLE_CALENDAR_EMBED_SRC = "hiltylena@gmail.com";
-const GOOGLE_CALENDAR_TZ = "America/New_York";
+const IS_LOCAL_DEV = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+const ENABLE_OPTIONAL_STATIC_DATASETS = IS_LOCAL_DEV || Boolean(window.PORTAL_CONFIG?.enableLocalDatasets);
 const PIPELINE_STAGES = ["app_submitted", "underwriting", "approved", "issued", "paid"];
 const LEASE_WINDOW_MS = 15 * 60 * 1000;
 const FINAL_DISPOSITIONS = new Set(["sold", "not_qualified", "not_interested", "issued", "paid"]);
@@ -301,12 +303,43 @@ async function fetchPortalProfile(userId) {
 function applyContentStudioRolePermissions() {
   const role = normalizePortalRole(state.auth?.role);
   document.body.dataset.portalRole = role;
+  const loggedIn = hasPortalContentAccess();
 
   const configs = [
-    { ids: ["contentSaveBtn", "contentStepSaveBtn", "contentCopyCanvaHandoffBtn", "contentPreviewCopyCanvaBtn", "contentOpenCanvaDesignBtn"], allowed: canEditContent(), reason: "Editors, approvers, or admins can edit Content Studio posts." },
-    { ids: ["contentSubmitReviewBtn", "contentRequestChangesBtn"], allowed: canEditContent(), reason: "Editors, approvers, or admins can move posts through review." },
-    { ids: ["contentApproveBtn", "contentStepApproveBtn", "contentScheduleBtn", "contentStepScheduleBtn", "contentBulkApproveBtn", "contentBulkScheduleBtn"], allowed: canApproveContent(), reason: "Only approvers or admins can approve and schedule content." },
-    { ids: ["contentRunPublishBtn", "contentRunPublishTopBtn", "contentStepPublishBtn"], allowed: canPublishContent(), reason: "Only admins can publish posts to Buffer." },
+    {
+      ids: [
+        "contentSaveBtn",
+        "contentStepSaveBtn",
+        "contentCopyCanvaHandoffBtn",
+        "contentPreviewCopyCanvaBtn",
+        "contentOpenCanvaDesignBtn",
+        "contentSubmitReviewBtn",
+        "contentRequestChangesBtn",
+      ],
+      allowed: canEditContent(),
+      reason: loggedIn ? "Your current role cannot edit Content Studio posts." : "Sign into the portal to use Content Studio.",
+    },
+    {
+      ids: [
+        "contentApproveBtn",
+        "contentStepApproveBtn",
+        "contentScheduleBtn",
+        "contentStepScheduleBtn",
+        "contentBulkApproveBtn",
+        "contentBulkScheduleBtn",
+      ],
+      allowed: canApproveContent(),
+      reason: loggedIn ? "Your current role cannot approve or schedule Content Studio posts." : "Sign into the portal to use Content Studio.",
+    },
+    {
+      ids: [
+        "contentRunPublishBtn",
+        "contentRunPublishTopBtn",
+        "contentStepPublishBtn",
+      ],
+      allowed: canPublishContent(),
+      reason: loggedIn ? "Publishing requires an admin role and a configured remote publisher." : "Sign into the portal to use Content Studio.",
+    },
   ];
 
   configs.forEach(({ ids, allowed, reason }) => {
@@ -727,55 +760,6 @@ async function scheduleAppointmentInSupabase({
   };
 }
 
-async function createGoogleCalendarEvent({
-  clientName,
-  email,
-  phone,
-  scheduledAt,
-  description,
-  durationMinutes = 30,
-}) {
-  if (!GOOGLE_CALENDAR_WEB_APP_URL.trim()) {
-    return {
-      ok: false,
-      error: "Google Calendar web app URL is not configured.",
-    };
-  }
-  const response = await fetch(GOOGLE_CALENDAR_WEB_APP_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/plain;charset=utf-8",
-    },
-    body: JSON.stringify({
-      secret: GOOGLE_CALENDAR_WEB_APP_SECRET,
-      clientName,
-      email,
-      phone,
-      scheduledAt,
-      description,
-      durationMinutes,
-    }),
-  });
-  const responseText = await response.text().catch(() => "");
-  const data = (() => {
-    try {
-      return responseText ? JSON.parse(responseText) : {};
-    } catch (_error) {
-      return {};
-    }
-  })();
-  if (!response.ok || !data?.ok) {
-    throw new Error(
-      String(
-        data?.error
-          || (responseText && responseText.length < 200 ? responseText : "")
-          || `Google Calendar sync failed (${response.status})`,
-      ),
-    );
-  }
-  return data;
-}
-
 async function loadCarrierConfigsFromSupabase() {
   if (!supabase) return [];
   const { data, error } = await supabase
@@ -918,45 +902,20 @@ const opsCharts = {
   contentPillar: null,
 };
 
-function ymd(date) {
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`;
-}
-
-function buildGoogleEmbedUrl(options = {}) {
-  const params = new URLSearchParams({
-    src: GOOGLE_CALENDAR_EMBED_SRC,
-    ctz: GOOGLE_CALENDAR_TZ,
-    showTitle: "0",
-    showNav: "1",
-    showPrint: "0",
-    showTabs: options.mode === "WEEK" ? "1" : "0",
-    showCalendars: "0",
-    mode: options.mode || "WEEK",
-    color: "#222222",
-    bgcolor: "#121212",
-  });
-  if (options.dates) params.set("dates", options.dates);
-  return `https://calendar.google.com/calendar/embed?${params.toString()}`;
-}
-
 function setGoogleCalendarEmbeds() {
   const mainFrame = document.getElementById("calendarEmbedFrame");
   if (mainFrame) {
-    mainFrame.src = buildGoogleEmbedUrl({ mode: "WEEK" });
+    mainFrame.removeAttribute("src");
   }
 
   const agendaFrame = document.getElementById("dashboardAgendaFrame");
   if (agendaFrame) {
-    const start = new Date();
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    agendaFrame.src = buildGoogleEmbedUrl({
-      mode: "AGENDA",
-      dates: `${ymd(start)}/${ymd(end)}`,
-    });
+    agendaFrame.removeAttribute("src");
   }
+}
+
+function isContentApiAvailable() {
+  return Boolean(supabase && hasPortalContentAccess());
 }
 
 function hideDeskScriptToast() {
@@ -1549,6 +1508,15 @@ async function loadJson(path) {
   const response = await fetch(path);
   if (!response.ok) throw new Error(`Failed to load ${path}`);
   return response.json();
+}
+
+async function loadOptionalCsv(path) {
+  if (!ENABLE_OPTIONAL_STATIC_DATASETS) return [];
+  try {
+    return await loadCsv(path);
+  } catch {
+    return [];
+  }
 }
 
 function inferProductLineFromTrigger(triggerEvent) {
@@ -5036,11 +5004,19 @@ function setActiveTab(tab) {
     window.scrollTo({ top: 0, behavior: "auto" });
   }
 
-  if (normalizedTab === "dashboard" || normalizedTab === "calendar") {
-    setGoogleCalendarEmbeds();
-  }
   if (normalizedTab === "contentstudio") {
-    loadContentStudioData().catch(() => {});
+    if (isContentApiAvailable()) {
+      loadContentStudioData().catch(() => {});
+    } else {
+      state.contentPosts = [];
+      state.contentPublishJobs = [];
+      state.contentRevisions = [];
+      renderContentPostTable();
+      renderContentEditor();
+      renderContentPublishJobs();
+      renderContentRevisions();
+      setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    }
   }
 }
 
@@ -6023,6 +5999,137 @@ function classifyContentPillar(post) {
   return "Educational";
 }
 
+function getContentActorLabel() {
+  return String(
+    state.auth?.profile?.email
+      || state.auth?.profile?.full_name
+      || state.auth?.profile?.user_id
+      || "",
+  ).trim() || "portal_user";
+}
+
+function normalizeContentPlatforms(value) {
+  if (Array.isArray(value)) {
+    return value.map((item) => String(item || "").trim().toLowerCase()).filter(Boolean);
+  }
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map((item) => item.trim().toLowerCase())
+      .filter(Boolean);
+  }
+  if (value && typeof value === "object") {
+    return Object.values(value)
+      .map((item) => String(item || "").trim().toLowerCase())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+function normalizeContentPostRecord(row = {}) {
+  return {
+    ...row,
+    platforms: normalizeContentPlatforms(row.platforms || row.platforms_json),
+    platforms_json: row.platforms_json ?? row.platforms ?? [],
+  };
+}
+
+function normalizeContentPublishJobRecord(row = {}) {
+  const post = row.content_post || row.contentPost || null;
+  return {
+    ...row,
+    post_id: row.post_id || post?.post_id || "",
+  };
+}
+
+function buildContentPostPayloadFromEditor(post = {}) {
+  const platforms = String(document.getElementById("contentEditPlatforms")?.value || "")
+    .split(",")
+    .map((part) => part.trim().toLowerCase())
+    .filter(Boolean);
+  const scheduledFor = String(document.getElementById("contentEditScheduledFor")?.value || "").trim();
+
+  return {
+    post_id: post.post_id || null,
+    week_number: Number.isFinite(Number(post.week_number)) ? Number(post.week_number) : null,
+    day: Number.isFinite(Number(post.day)) ? Number(post.day) : null,
+    post_date: String(document.getElementById("contentEditDate")?.value || "").trim() || null,
+    post_time: String(document.getElementById("contentEditTime")?.value || "").trim() || null,
+    scheduled_for: scheduledFor ? new Date(scheduledFor).toISOString() : null,
+    platforms_json: platforms,
+    post_type: String(document.getElementById("contentEditType")?.value || "").trim() || null,
+    topic: String(document.getElementById("contentEditTopic")?.value || "").trim() || null,
+    hook: String(document.getElementById("contentEditHook")?.value || "").trim() || null,
+    caption: String(document.getElementById("contentEditCaption")?.value || "").trim() || null,
+    reel_script: String(document.getElementById("contentEditReelScript")?.value || "").trim() || null,
+    visual_prompt: String(document.getElementById("contentEditVisualPrompt")?.value || "").trim() || null,
+    canva_design_link: String(document.getElementById("contentEditCanvaLink")?.value || "").trim() || null,
+    asset_filename: String(document.getElementById("contentEditAssetFile")?.value || "").trim() || null,
+    cta: String(document.getElementById("contentEditCta")?.value || "").trim() || null,
+    hashtags_text: String(document.getElementById("contentEditHashtags")?.value || "").trim() || null,
+  };
+}
+
+function createContentRevisionSnapshot(post = {}) {
+  return {
+    post_id: post.post_id || null,
+    week_number: post.week_number ?? null,
+    day: post.day ?? null,
+    post_date: post.post_date || null,
+    post_time: post.post_time || null,
+    scheduled_for: post.scheduled_for || null,
+    platforms_json: post.platforms_json ?? post.platforms ?? [],
+    post_type: post.post_type || null,
+    topic: post.topic || null,
+    hook: post.hook || null,
+    caption: post.caption || null,
+    reel_script: post.reel_script || null,
+    visual_prompt: post.visual_prompt || null,
+    canva_design_link: post.canva_design_link || null,
+    asset_filename: post.asset_filename || null,
+    cta: post.cta || null,
+    hashtags_text: post.hashtags_text || null,
+    status: post.status || null,
+    design_status: post.design_status || null,
+  };
+}
+
+async function insertContentRevision(postId, snapshot, changeNote = "") {
+  if (!supabase || !postId) return;
+  const { data: currentRevision, error: revError } = await supabase
+    .from("content_revision")
+    .select("revision_number")
+    .eq("content_post_id", postId)
+    .order("revision_number", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (revError) throw revError;
+  const nextRevisionNumber = Number(currentRevision?.revision_number || 0) + 1;
+  const { error: insertError } = await supabase
+    .from("content_revision")
+    .insert({
+      content_post_id: postId,
+      revision_number: nextRevisionNumber,
+      changed_by: getContentActorLabel(),
+      change_note: changeNote || "Updated in remote portal",
+      snapshot_json: snapshot,
+    });
+  if (insertError) throw insertError;
+}
+
+async function insertContentApproval(postId, decision, note = "") {
+  if (!supabase || !postId) return;
+  const { error } = await supabase
+    .from("content_approval")
+    .insert({
+      content_post_id: postId,
+      decision,
+      note: note || null,
+      actor: getContentActorLabel(),
+    });
+  if (error) throw error;
+}
+
 function renderContentPillarDistribution(posts) {
   const canvas = document.getElementById("contentPillarDistributionChart");
   const summaryEl = document.getElementById("contentPillarDistributionSummary");
@@ -6095,7 +6202,7 @@ function renderContentPostTable() {
   if (!filteredPosts.length) {
     const emptyMessage = state.contentPosts.length
       ? "No posts match the current filters. Clear search or switch week, platform, or status."
-      : "No content posts loaded yet. Start the local API, then refresh or import buffer-import.json.";
+      : "No content posts loaded yet. Import a JSON plan or create shared posts in Supabase to begin.";
     tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
     if (selectAll) selectAll.checked = false;
     return;
@@ -6255,11 +6362,15 @@ function renderContentEditor() {
 }
 
 async function fetchContentPosts() {
-  const response = await apiFetch(LOCAL_DB_CONTENT_POSTS_URL);
-  if (!response.ok) throw new Error(`Content posts unavailable (${response.status})`);
-  const data = await response.json();
-  if (!data.ok) throw new Error(data.error || "Could not load content posts");
-  state.contentPosts = Array.isArray(data.items) ? data.items : [];
+  if (!isContentApiAvailable()) throw new Error("Content Studio remote API is disabled.");
+  const { data, error } = await supabase
+    .from("content_post")
+    .select("*")
+    .order("post_date", { ascending: false, nullsFirst: false })
+    .order("created_at", { ascending: false })
+    .limit(500);
+  if (error) throw error;
+  state.contentPosts = (Array.isArray(data) ? data : []).map(normalizeContentPostRecord);
   const validIds = new Set(state.contentPosts.map((post) => String(post.id)));
   state.ui.contentSelectedPostIds = (state.ui.contentSelectedPostIds || []).filter((id) => validIds.has(String(id)));
   const hasSelection = state.contentPosts.some(
@@ -6271,27 +6382,46 @@ async function fetchContentPosts() {
 }
 
 async function fetchContentPublishJobs() {
-  const response = await apiFetch(`${LOCAL_DB_CONTENT_PUBLISH_JOBS_URL}?limit=30`);
-  if (!response.ok) throw new Error(`Publish jobs unavailable (${response.status})`);
-  const data = await response.json();
-  if (!data.ok) throw new Error(data.error || "Could not load publish jobs");
-  state.contentPublishJobs = Array.isArray(data.items) ? data.items : [];
+  if (!isContentApiAvailable()) throw new Error("Content Studio remote API is disabled.");
+  const { data, error } = await supabase
+    .from("content_publish_job")
+    .select("id,status,error_message,run_at,completed_at,response_json,content_post:content_post_id(post_id)")
+    .order("run_at", { ascending: false })
+    .limit(30);
+  if (error) throw error;
+  state.contentPublishJobs = (Array.isArray(data) ? data : []).map(normalizeContentPublishJobRecord);
 }
 
 async function fetchContentRevisions() {
+  if (!isContentApiAvailable()) throw new Error("Content Studio remote API is disabled.");
   const post = getSelectedContentPost();
   if (!post) {
     state.contentRevisions = [];
     return;
   }
-  const response = await apiFetch(`${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}/revisions`);
-  if (!response.ok) throw new Error(`Revisions unavailable (${response.status})`);
-  const data = await response.json();
-  if (!data.ok) throw new Error(data.error || "Could not load revisions");
-  state.contentRevisions = Array.isArray(data.items) ? data.items : [];
+  const { data, error } = await supabase
+    .from("content_revision")
+    .select("*")
+    .eq("content_post_id", post.id)
+    .order("revision_number", { ascending: false })
+    .order("created_at", { ascending: false })
+    .limit(50);
+  if (error) throw error;
+  state.contentRevisions = Array.isArray(data) ? data : [];
 }
 
 async function loadContentStudioData(statusMessage = "") {
+  if (!isContentApiAvailable()) {
+    state.contentPosts = [];
+    state.contentPublishJobs = [];
+    state.contentRevisions = [];
+    renderContentPostTable();
+    renderContentEditor();
+    renderContentPublishJobs();
+    renderContentRevisions();
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   setContentStudioStatus("Loading...");
   let postsError = "";
   let jobsError = "";
@@ -6337,6 +6467,12 @@ async function loadContentStudioData(statusMessage = "") {
 }
 
 async function loadContentRevisionsOnly() {
+  if (!isContentApiAvailable()) {
+    state.contentRevisions = [];
+    renderContentRevisions();
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   try {
     await fetchContentRevisions();
     renderContentRevisions();
@@ -6348,6 +6484,10 @@ async function loadContentRevisionsOnly() {
 }
 
 async function saveSelectedContentDraft() {
+  if (!isContentApiAvailable()) {
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   if (!canEditContent()) {
     setContentStudioStatus("Your role cannot edit Content Studio posts.");
     return;
@@ -6358,34 +6498,15 @@ async function saveSelectedContentDraft() {
     return;
   }
   setContentStudioStatus("Saving...");
-  const payload = {
-    actor: "editor",
-    post_date: String(document.getElementById("contentEditDate")?.value || "").trim(),
-    post_time: String(document.getElementById("contentEditTime")?.value || "").trim(),
-    scheduled_for: String(document.getElementById("contentEditScheduledFor")?.value || "").trim(),
-    platforms: String(document.getElementById("contentEditPlatforms")?.value || "")
-      .split(",")
-      .map((part) => part.trim())
-      .filter(Boolean),
-    post_type: String(document.getElementById("contentEditType")?.value || "").trim(),
-    topic: String(document.getElementById("contentEditTopic")?.value || "").trim(),
-    hook: String(document.getElementById("contentEditHook")?.value || "").trim(),
-    caption: String(document.getElementById("contentEditCaption")?.value || "").trim(),
-    reel_script: String(document.getElementById("contentEditReelScript")?.value || "").trim(),
-    visual_prompt: String(document.getElementById("contentEditVisualPrompt")?.value || "").trim(),
-    canva_design_link: String(document.getElementById("contentEditCanvaLink")?.value || "").trim(),
-    asset_filename: String(document.getElementById("contentEditAssetFile")?.value || "").trim(),
-    cta: String(document.getElementById("contentEditCta")?.value || "").trim(),
-    hashtags_text: String(document.getElementById("contentEditHashtags")?.value || "").trim(),
-  };
+  const payload = buildContentPostPayloadFromEditor(post);
   try {
-    const response = await apiFetch(`${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || `Save failed (${response.status})`);
+    const existingSnapshot = createContentRevisionSnapshot(post);
+    const { error } = await supabase
+      .from("content_post")
+      .update(payload)
+      .eq("id", post.id);
+    if (error) throw error;
+    await insertContentRevision(post.id, existingSnapshot, "Draft updated in remote portal");
     clearContentDraftOverride(post.id);
     await loadContentStudioData("Draft saved.");
   } catch (error) {
@@ -6394,6 +6515,10 @@ async function saveSelectedContentDraft() {
 }
 
 async function runContentAction(action) {
+  if (!isContentApiAvailable()) {
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   if (action === "approve" || action === "schedule") {
     if (!canApproveContent()) {
       setContentStudioStatus("Your role cannot approve or schedule posts.");
@@ -6424,20 +6549,31 @@ async function runContentAction(action) {
   const note = action === "request-changes" ? "Needs edits before approval" : "";
   setContentStudioStatus(`Applying ${action}...`);
   try {
-    const response = await apiFetch(
-      `${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}/${encodeURIComponent(action)}`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          actor: action === "approve" ? "approver" : "editor",
-          note,
-          scheduled_for: String(document.getElementById("contentEditScheduledFor")?.value || "").trim(),
-        }),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || `Action failed (${response.status})`);
+    const changes = {};
+    const now = nowIso();
+    if (action === "submit-review") {
+      changes.status = "ready_for_approval";
+    } else if (action === "request-changes") {
+      changes.status = "draft";
+      await insertContentApproval(post.id, "request_changes", note);
+    } else if (action === "approve") {
+      changes.status = "approved";
+      changes.approved_by = getContentActorLabel();
+      changes.approved_at = now;
+      await insertContentApproval(post.id, "approved", "Approved in remote portal");
+    } else if (action === "schedule") {
+      const scheduledForValue = String(document.getElementById("contentEditScheduledFor")?.value || "").trim();
+      if (!scheduledForValue) throw new Error("Choose Schedule At before scheduling.");
+      changes.status = "scheduled";
+      changes.scheduled_for = new Date(scheduledForValue).toISOString();
+    } else {
+      throw new Error(`Unsupported action: ${action}`);
+    }
+    const { error } = await supabase
+      .from("content_post")
+      .update(changes)
+      .eq("id", post.id);
+    if (error) throw error;
     clearContentDraftOverride(post.id);
     const actionLabelMap = {
       approve: "Post approved. Schedule time saved.",
@@ -6452,6 +6588,10 @@ async function runContentAction(action) {
 }
 
 async function runBulkContentAction(action) {
+  if (!isContentApiAvailable()) {
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   if (action === "approve" || action === "schedule") {
     if (!canApproveContent()) {
       setContentStudioStatus("Your role cannot run this bulk approval action.");
@@ -6472,23 +6612,33 @@ async function runBulkContentAction(action) {
   let failed = 0;
   for (const postId of selectedIds) {
     try {
-      const response = await apiFetch(
-        `${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(postId)}/${encodeURIComponent(action)}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            actor: action === "approve" || action === "schedule" ? "approver" : "editor",
-            note: action === "request-changes" ? "Bulk update: needs edits" : "",
-          }),
-        },
-      );
-      const data = await response.json();
-      if (!response.ok || !data.ok) {
-        failed += 1;
+      const post = state.contentPosts.find((row) => String(row.id) === String(postId));
+      if (!post) throw new Error("Missing selected post");
+      const changes = {};
+      if (action === "submit-review") {
+        changes.status = "ready_for_approval";
+      } else if (action === "request-changes") {
+        changes.status = "draft";
+        await insertContentApproval(post.id, "request_changes", "Bulk update: needs edits");
+      } else if (action === "approve") {
+        changes.status = "approved";
+        changes.approved_by = getContentActorLabel();
+        changes.approved_at = nowIso();
+        await insertContentApproval(post.id, "approved", "Bulk approval");
+      } else if (action === "schedule") {
+        const scheduleSource = String(document.getElementById("contentEditScheduledFor")?.value || post.scheduled_for || "").trim();
+        if (!scheduleSource) throw new Error("Missing schedule time");
+        changes.status = "scheduled";
+        changes.scheduled_for = new Date(scheduleSource).toISOString();
       } else {
-        success += 1;
+        throw new Error(`Unsupported action: ${action}`);
       }
+      const { error } = await supabase
+        .from("content_post")
+        .update(changes)
+        .eq("id", post.id);
+      if (error) throw error;
+      success += 1;
     } catch {
       failed += 1;
     }
@@ -6497,6 +6647,10 @@ async function runBulkContentAction(action) {
 }
 
 async function restoreContentRevision(revisionId) {
+  if (!isContentApiAvailable()) {
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   if (!canEditContent()) {
     setContentStudioStatus("Your role cannot restore revisions.");
     return;
@@ -6509,19 +6663,20 @@ async function restoreContentRevision(revisionId) {
   if (!revisionId) return;
   setContentStudioStatus("Restoring revision...");
   try {
-    const response = await apiFetch(
-      `${LOCAL_DB_CONTENT_POSTS_URL}/${encodeURIComponent(post.id)}/restore`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          actor: "editor",
-          revision_id: Number(revisionId),
-        }),
-      },
-    );
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || `Restore failed (${response.status})`);
+    const { data: revision, error: revisionError } = await supabase
+      .from("content_revision")
+      .select("*")
+      .eq("id", Number(revisionId))
+      .maybeSingle();
+    if (revisionError) throw revisionError;
+    if (!revision?.snapshot_json) throw new Error("Revision snapshot not found.");
+    const snapshot = revision.snapshot_json || {};
+    const { error: updateError } = await supabase
+      .from("content_post")
+      .update(snapshot)
+      .eq("id", post.id);
+    if (updateError) throw updateError;
+    await insertContentRevision(post.id, createContentRevisionSnapshot(post), `Restored revision ${revision.revision_number || revision.id}`);
     await loadContentStudioData("Revision restored.");
   } catch (error) {
     setContentStudioStatus(String(error.message || error));
@@ -6529,44 +6684,28 @@ async function restoreContentRevision(revisionId) {
 }
 
 async function runContentPublish() {
+  if (!isContentApiAvailable()) {
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   if (!canPublishContent()) {
     setContentStudioStatus("Only admins can publish posts.");
     return;
   }
-  const flow = getContentPublishFlowState();
-  if (flow.post) {
-    if (!flow.approved || !flow.hasSchedule || !flow.hasAsset) {
-      const details = flow.issues.length ? `\n\n${flow.issues.join("\n")}` : "";
-      window.alert(`This post is not ready to publish yet.\n\nSelected: ${flow.post.post_id}\nNext step: ${flow.nextStep}${details}`);
-      return;
-    }
-    const confirmed = window.confirm(
-      `Run publish now?\n\nSelected post: ${flow.post.post_id}\nThis will send approved posts with saved schedule times to Buffer, not just the selected row.`,
-    );
-    if (!confirmed) return;
-  }
-  setContentStudioStatus("Triggering publish...");
-  try {
-    const response = await apiFetch(LOCAL_DB_CONTENT_PUBLISH_RUN_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ limit: 25 }),
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || `Publish failed (${response.status})`);
-    await loadContentStudioData(`Publish run complete (${Number(data.processed || 0)} processed).`);
-  } catch (error) {
-    setContentStudioStatus(String(error.message || error));
-  }
+  setContentStudioStatus("Remote publish backend is not configured yet. Content editing, approvals, schedules, and job history are live; Buffer publishing still needs a hosted worker.");
 }
 
 async function importContentFromJsonFile(file) {
+  if (!isContentApiAvailable()) {
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
+  }
   if (!file) return;
   setContentStudioStatus("Importing...");
   try {
     const raw = await file.text();
     const parsed = JSON.parse(raw);
-    const rawPosts = Array.isArray(parsed) ? parsed : parsed?.posts;
+    const rawPosts = Array.isArray(parsed) ? parsed : parsed?.posts || parsed?.items;
     const isBufferRow = (item) =>
       Boolean(
         item &&
@@ -6648,41 +6787,45 @@ async function importContentFromJsonFile(file) {
     }
     const weekMatch = String(file.name || "").match(/WEEK(\d+)/i);
     const weekNumber = weekMatch ? Number(weekMatch[1]) : 0;
-    const response = await apiFetch(LOCAL_DB_CONTENT_POSTS_IMPORT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        week_number: Number.isFinite(weekNumber) ? weekNumber : 0,
-        source_file: file.name || "",
-        actor: "editor",
-        posts,
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || `Import failed (${response.status})`);
-    await loadContentStudioData(`Imported ${Number(data.imported || 0)} new, updated ${Number(data.updated || 0)}.`);
+    const payload = posts.map((post) => ({
+      post_id: post.post_id || null,
+      week_number: Number.isFinite(Number(post.week_number || weekNumber)) ? Number(post.week_number || weekNumber) : null,
+      day: Number.isFinite(Number(post.day)) ? Number(post.day) : null,
+      post_date: post.post_date || null,
+      post_time: post.post_time || null,
+      scheduled_for: post.scheduled_for ? new Date(post.scheduled_for).toISOString() : null,
+      platforms_json: normalizeContentPlatforms(post.platforms || post.platforms_json),
+      post_type: post.post_type || null,
+      topic: post.topic || null,
+      hook: post.hook || null,
+      caption: post.caption || null,
+      reel_script: post.reel_script || null,
+      visual_prompt: post.visual_prompt || null,
+      canva_design_link: post.canva_design_link || null,
+      asset_filename: post.asset_filename || null,
+      cta: post.cta || null,
+      hashtags_text: post.hashtags_text || null,
+      status: post.status || "draft",
+      design_status: post.design_status || "not_started",
+      source_file: file.name || "",
+      created_by: getContentActorLabel(),
+    }));
+    const { error } = await supabase
+      .from("content_post")
+      .upsert(payload, { onConflict: "post_id,post_date" });
+    if (error) throw error;
+    await loadContentStudioData(`Imported ${payload.length} posts to Supabase.`);
   } catch (error) {
     setContentStudioStatus(String(error.message || error));
   }
 }
 
 async function importContentFromCurrentBufferFile() {
-  setContentStudioStatus("Importing current buffer-import.json...");
-  try {
-    const response = await apiFetch(LOCAL_DB_CONTENT_POSTS_IMPORT_BUFFER_CURRENT_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        actor: "automation",
-        source_file: "buffer-import.json",
-      }),
-    });
-    const data = await response.json();
-    if (!response.ok || !data.ok) throw new Error(data.error || `Import failed (${response.status})`);
-    await loadContentStudioData(`Imported ${Number(data.imported || 0)} new, updated ${Number(data.updated || 0)} from buffer-import.json.`);
-  } catch (error) {
-    setContentStudioStatus(String(error.message || error));
+  if (!isContentApiAvailable()) {
+    setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    return;
   }
+  setContentStudioStatus("Remote buffer-import.json pull is not configured yet. Use JSON import from your device for now.");
 }
 
 function attachContentStudioHandlers() {
@@ -7735,7 +7878,6 @@ async function saveLeadData() {
   try {
     const shouldSchedule = syncViaGog && ["callback", "follow_up"].includes(currentDisposition);
     let portalScheduleWarning = "";
-    let googleCalendarWarning = "";
     if (supabase) {
       const saveResult = await saveCallDeskLeadToSupabase(payload, {
         clientName,
@@ -7799,38 +7941,12 @@ async function saveLeadData() {
           }
           payload.calendarEventId = String(scheduleData.calendarEventId || "").trim();
           payload.nextAppointmentTime = String(scheduleData.nextAppointmentTime || followUpAt).trim();
-
-          try {
-            const googleScheduleData = await createGoogleCalendarEvent({
-              clientName,
-              email: lead.email || "",
-              phone: lead.phone || "",
-              scheduledAt: followUpAt,
-              description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
-              durationMinutes: 30,
-            });
-            payload.calendarEventId = String(
-              googleScheduleData.calendarEventId || payload.calendarEventId || "",
-            ).trim();
-          } catch (calendarError) {
-            googleCalendarWarning = String(calendarError?.message || "Google Calendar sync failed.");
-          }
         } catch (scheduleError) {
           portalScheduleWarning = String(scheduleError?.message || "Scheduling failed after save.");
         }
       }
     }
 
-    if (GOOGLE_WEBHOOK_URL.trim()) {
-      await fetch(GOOGLE_WEBHOOK_URL, {
-        method: "POST",
-        mode: "no-cors",
-        headers: {
-          "Content-Type": "text/plain;charset=utf-8",
-        },
-        body: JSON.stringify(payload),
-      });
-    }
     if (!supabase && LOCAL_DB_SYNC_URL.trim()) {
       const localResponse = await fetch(LOCAL_DB_SYNC_URL, {
         method: "POST",
@@ -7865,9 +7981,6 @@ async function saveLeadData() {
         window.setTimeout(() => {
           window.alert(`Portal scheduling failed:\n\n${portalScheduleWarning}`);
         }, 0);
-      } else if (shouldSchedule && googleCalendarWarning) {
-        statusEl.textContent = `Saved and scheduled in portal. Google Calendar sync is off for now.`;
-        successButtonLabel = "Saved and scheduled ✅";
       } else {
         statusEl.textContent = shouldSchedule && supabase
           ? "Saved and scheduled in portal."
@@ -8451,7 +8564,6 @@ function renderDashboard(data) {
   populateCampaignFilters(mergedLeads);
   populateSourcedFilters(sourcedLeads);
   renderOpsCharts(mergedLeads);
-  setGoogleCalendarEmbeds();
   renderLeadSelectionTable();
   renderCampaignTable();
   renderLeadTable();
@@ -8540,12 +8652,12 @@ async function initialize() {
   try {
     const [leads, activity, bookings, sales, targets, sourcedLeads, carrierDocs, carrierGrid] = await Promise.all([
       supabase ? loadLeadRowsFromSupabase() : loadCsv(DATA_FILES.leads),
-      loadCsv(DATA_FILES.activity).catch(() => []),
-      loadCsv(DATA_FILES.bookings).catch(() => []),
-      loadCsv(DATA_FILES.sales).catch(() => []),
-      loadCsv(DATA_FILES.targets).catch(() => []),
-      loadCsv(DATA_FILES.sourced).catch(() => []),
-      loadCsv(DATA_FILES.carrierDocs).catch(() => []),
+      loadOptionalCsv(DATA_FILES.activity),
+      loadOptionalCsv(DATA_FILES.bookings),
+      loadOptionalCsv(DATA_FILES.sales),
+      loadOptionalCsv(DATA_FILES.targets),
+      loadOptionalCsv(DATA_FILES.sourced),
+      loadOptionalCsv(DATA_FILES.carrierDocs),
       loadJson("./carrierData.json").catch(() => []),
     ]);
 
@@ -8578,6 +8690,7 @@ async function bootstrapPortalAuth() {
     }
     state.auth.profile = profile;
     state.auth.role = normalizePortalRole(profile?.role);
+    state.auth.sessionActive = true;
     setPortalUser(session, profile);
     applyContentStudioRolePermissions();
     setAuthLocked(false);
@@ -8586,6 +8699,7 @@ async function bootstrapPortalAuth() {
   } else {
     state.auth.profile = null;
     state.auth.role = "guest";
+    state.auth.sessionActive = false;
     setPortalUser(null, null);
     applyContentStudioRolePermissions();
     setAuthLocked(true);
@@ -8605,6 +8719,7 @@ async function bootstrapPortalAuth() {
         }
         state.auth.profile = profile;
         state.auth.role = normalizePortalRole(profile?.role);
+        state.auth.sessionActive = true;
         setPortalUser(sessionUpdate, profile);
         applyContentStudioRolePermissions();
         setAuthLocked(false);
@@ -8613,6 +8728,7 @@ async function bootstrapPortalAuth() {
       } else {
         state.auth.profile = null;
         state.auth.role = "guest";
+        state.auth.sessionActive = false;
         setPortalUser(null, null);
         applyContentStudioRolePermissions();
         setAuthLocked(true);
@@ -8899,6 +9015,7 @@ document.getElementById("authForm")?.addEventListener("submit", async (event) =>
     }
     state.auth.profile = profile;
     state.auth.role = normalizePortalRole(profile?.role);
+    state.auth.sessionActive = true;
     setPortalUser(session, profile);
     applyContentStudioRolePermissions();
     setAuthLocked(false);
