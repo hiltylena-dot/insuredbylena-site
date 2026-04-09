@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Insurance Ops Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260409-26" />
+    <link rel="stylesheet" href="./styles.css?v=20260409-31" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       (() => {
@@ -335,17 +335,65 @@
       }
 
       @media (max-width: 768px) {
+        body[data-active-tab="calldesk"] .app-shell {
+          grid-template-rows: auto minmax(0, 1fr) !important;
+          min-height: 100dvh !important;
+        }
+
+        body[data-active-tab="calldesk"] .top-nav {
+          position: static !important;
+          height: auto !important;
+          min-height: 0 !important;
+          align-items: flex-start !important;
+          gap: 6px !important;
+          padding: 4px 6px !important;
+          flex-direction: column !important;
+        }
+
+        body[data-active-tab="calldesk"] .top-nav-left,
+        body[data-active-tab="calldesk"] .top-nav-right {
+          width: 100% !important;
+          min-width: 0 !important;
+        }
+
+        body[data-active-tab="calldesk"] .top-brand,
+        body[data-active-tab="calldesk"] .top-nav-right {
+          display: none !important;
+        }
+
+        body[data-active-tab="calldesk"] .top-nav .tab-strip {
+          width: 100% !important;
+          padding: 2px !important;
+          border-radius: 8px !important;
+          gap: 4px !important;
+        }
+
+        body[data-active-tab="calldesk"] .top-nav .tab-button {
+          padding: 5px 8px !important;
+          font-size: 0.66rem !important;
+          line-height: 1.15 !important;
+        }
+
         .main-panel {
           height: auto !important;
-          min-height: calc(100vh - 60px) !important;
+          min-height: 0 !important;
           overflow: auto !important;
-          padding: 8px !important;
+          padding: 6px !important;
+        }
+
+        body[data-active-tab="calldesk"] .main-panel,
+        body[data-active-tab="calldesk"] #callDeskTabPanel,
+        body[data-active-tab="calldesk"] .tab-panel {
+          height: auto !important;
+          min-height: 0 !important;
+          max-height: none !important;
+          overflow: visible !important;
         }
 
         #callDeskTabPanel {
           height: auto !important;
           overflow: auto !important;
-          padding-bottom: 88px !important;
+          padding-bottom: 96px !important;
         }
 
         .calldesk-stage {
@@ -356,6 +404,19 @@
           max-height: none !important;
           min-height: 0 !important;
           padding: 0 !important;
+        }
+
+        body[data-active-tab="calldesk"] .calldesk-right,
+        body[data-active-tab="calldesk"] .calldesk-center,
+        body[data-active-tab="calldesk"] .calldesk-left,
+        body[data-active-tab="calldesk"] .calldesk-sticky {
+          position: static !important;
+          top: auto !important;
+          max-height: none !important;
+          overflow: visible !important;
+          border: 0 !important;
+          padding-left: 0 !important;
+          padding-right: 0 !important;
         }
 
         .calldesk-column {
@@ -399,7 +460,7 @@
 
         .calldesk-panel {
           border-radius: 14px !important;
-          padding: 12px !important;
+          padding: 10px !important;
         }
 
         .calldesk-panel .panel-header.compact {
@@ -1287,6 +1348,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260409-30"></script>
+    <script type="module" src="./app.js?v=20260409-31"></script>
   </body>
 </html>

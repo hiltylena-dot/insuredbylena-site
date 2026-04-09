@@ -4983,6 +4983,7 @@ function setActiveTab(tab) {
   }
   state.ui.activeTab = normalizedTab;
   localStorage.setItem(ACTIVE_TAB_STORAGE_KEY, normalizedTab);
+  document.body.dataset.activeTab = normalizedTab;
 
   document.querySelectorAll("[data-tab]").forEach((button) => {
     const active = button.dataset.tab === normalizedTab;
