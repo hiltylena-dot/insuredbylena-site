@@ -978,6 +978,66 @@ function saveCreatedLeads() {
   localStorage.setItem(CALL_DESK_CREATED_LEADS_KEY, JSON.stringify(state.createdLeads));
 }
 
+function isSyncedLeadRecord(lead = {}) {
+  return Number(lead?.lead_id || 0) > 0;
+}
+
+function getLeadExternalId(lead = {}) {
+  return String(lead?.lead_external_id || "").trim();
+}
+
+function pruneCreatedLeadsAgainstSyncedLeads(createdLeads = [], syncedLeads = []) {
+  const syncedIds = new Set(
+    (Array.isArray(syncedLeads) ? syncedLeads : [])
+      .map((lead) => getLeadExternalId(lead))
+      .filter(Boolean),
+  );
+
+  return (Array.isArray(createdLeads) ? createdLeads : []).filter((lead) => {
+    const externalId = getLeadExternalId(lead);
+    if (!externalId) return false;
+    if (isSyncedLeadRecord(lead)) return false;
+    return !syncedIds.has(externalId);
+  });
+}
+
+function mergeLeadsWithDrafts(baseLeads = [], draftLeads = []) {
+  const merged = new Map();
+  (Array.isArray(baseLeads) ? baseLeads : []).forEach((lead) => {
+    const key = getLeadExternalId(lead);
+    if (!key) return;
+    merged.set(key, lead);
+  });
+  (Array.isArray(draftLeads) ? draftLeads : []).forEach((lead) => {
+    const key = getLeadExternalId(lead);
+    if (!key || merged.has(key)) return;
+    merged.set(key, lead);
+  });
+  return Array.from(merged.values());
+}
+
+function upsertLeadIntoState(lead = {}) {
+  const externalId = getLeadExternalId(lead);
+  if (!externalId) return;
+  const current = Array.isArray(state.leads) ? [...state.leads] : [];
+  const existingIndex = current.findIndex((row) => getLeadExternalId(row) === externalId);
+  if (existingIndex >= 0) current[existingIndex] = { ...current[existingIndex], ...lead };
+  else current.unshift(lead);
+  state.leads = current;
+}
+
+function removeCreatedLeadByExternalId(leadExternalId) {
+  const normalized = String(leadExternalId || "").trim();
+  if (!normalized) return;
+  const next = (Array.isArray(state.createdLeads) ? state.createdLeads : []).filter(
+    (row) => getLeadExternalId(row) !== normalized,
+  );
+  if (next.length !== state.createdLeads.length) {
+    state.createdLeads = next;
+    saveCreatedLeads();
+  }
+}
+
 function loadCallOutcomes() {
   try {
     const parsed = JSON.parse(localStorage.getItem(OUTCOMES_STORAGE_KEY) || "[]");
@@ -2145,6 +2205,7 @@ async function refreshTodaysAppointments() {
       const todayStart = Date.parse(startOfDayIso(0));
       const todayEnd = Date.parse(endOfDayIso(0));
       items = state.leads
+        .filter((lead) => isSyncedLeadRecord(lead))
         .filter((lead) => {
           const ts = Date.parse(String(lead?.next_appointment_time || ""));
           return Number.isFinite(ts) && ts >= todayStart && ts <= todayEnd;
@@ -2237,6 +2298,7 @@ function renderCalendarLeadQueue() {
   if (!table || !countEl) return;
   const byLeadId = new Map();
   for (const lead of state.leads) {
+    if (!isSyncedLeadRecord(lead)) continue;
     const internalLeadId = Number(lead?.lead_id || 0);
     const leadId = String(lead?.lead_external_id || "").trim();
     const nextAt = String(lead?.next_appointment_time || "").trim();
@@ -2293,7 +2355,9 @@ async function refreshCalendarTabData() {
       const todayStart = Date.parse(startOfDayIso(0));
       const todayEnd = Date.parse(endOfDayIso(0));
       const monthEnd = Date.parse(endOfDayIso(30));
-      const scheduledLeads = state.leads.filter((lead) => String(lead?.next_appointment_time || "").trim());
+      const scheduledLeads = state.leads.filter(
+        (lead) => isSyncedLeadRecord(lead) && String(lead?.next_appointment_time || "").trim(),
+      );
       state.calendarTodayEvents = scheduledLeads
         .filter((lead) => {
           const ts = Date.parse(String(lead?.next_appointment_time || ""));
@@ -7518,6 +7582,8 @@ async function saveLeadData() {
       const savedLead = await saveLeadToSupabase(payload);
       if (savedLead?.lead_external_id) {
         payload.contactId = String(savedLead.lead_external_id || payload.contactId).trim();
+        upsertLeadIntoState(savedLead);
+        removeCreatedLeadByExternalId(payload.contactId);
       }
     }
     if (shouldSchedule) {
@@ -8167,7 +8233,12 @@ function attachCriteriaHandlers() {
 function renderDashboard(data) {
   const { leads, activity, bookings, sales, targets, sourcedLeads, carrierDocs } = data;
   const cleanedLeads = sanitizeLeadRows(leads).rows;
-  const mergedLeads = mergeLeadsByExternalId(cleanedLeads, state.createdLeads);
+  const prunedCreatedLeads = pruneCreatedLeadsAgainstSyncedLeads(state.createdLeads, cleanedLeads);
+  if (prunedCreatedLeads.length !== state.createdLeads.length) {
+    state.createdLeads = prunedCreatedLeads;
+    saveCreatedLeads();
+  }
+  const mergedLeads = mergeLeadsWithDrafts(cleanedLeads, prunedCreatedLeads);
   state.leads = mergedLeads;
   state.activity = activity;
   state.bookings = bookings;
