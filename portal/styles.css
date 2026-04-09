@@ -166,6 +166,20 @@ body.auth-locked .auth-gate {
   color: #dbe9fb;
 }
 
+.portal-user-role {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(222, 199, 177, 0.24);
+  background: rgba(222, 199, 177, 0.12);
+  color: #f3e8dc;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 code {
   font-family: "SF Mono", "Menlo", monospace;
   font-size: 0.9em;
@@ -1974,6 +1988,227 @@ th.sortable[data-sort-dir="desc"]::after {
 @media (max-width: 1300px) {
   .top-nav-right {
     display: none !important;
+  }
+}
+
+@media (max-width: 760px) {
+  .top-brand,
+  .top-nav-right #topStatusPills,
+  .top-nav-right #datasetStatus,
+  .top-nav-right .top-nav-role,
+  .top-nav-right #carrierSettingsBtn,
+  .top-nav-right #exportSummaryBtn,
+  .top-nav-right .file-button {
+    display: none !important;
+  }
+
+  .top-nav {
+    height: auto !important;
+    padding: 8px 10px !important;
+    gap: 8px !important;
+    align-items: stretch !important;
+    flex-direction: column !important;
+  }
+
+  .top-nav-left,
+  .top-nav-right {
+    width: 100% !important;
+  }
+
+  .top-nav .tab-strip {
+    width: 100% !important;
+    padding: 0 !important;
+    gap: 6px !important;
+  }
+
+  .top-nav .tab-button {
+    font-size: 12px !important;
+    padding: 10px 12px !important;
+  }
+
+  .main-panel {
+    padding: 8px !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  #callDeskTabPanel {
+    height: auto !important;
+    overflow: visible !important;
+    padding: 0 !important;
+  }
+
+  .calldesk-stage {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+    height: auto !important;
+  }
+
+  .calldesk-column {
+    height: auto !important;
+    overflow: visible !important;
+    display: contents !important;
+  }
+
+  .client-snapshot-panel {
+    order: 1;
+  }
+
+  .wrapup-panel {
+    order: 2;
+  }
+
+  .discovery-panel {
+    order: 3;
+  }
+
+  .recommendation-panel {
+    order: 4;
+  }
+
+  #deskCarrierActionCard {
+    order: 5;
+  }
+
+  .calldesk-readiness-widget,
+  #deskScriptDrawerToggleBtn,
+  .wrapup-panel .panel-header .panel-label,
+  .client-snapshot-panel .panel-header .panel-label,
+  .discovery-panel .panel-header .panel-label,
+  .recommendation-panel .panel-header .panel-label,
+  .wrapup-panel #notesHistoryList,
+  .dense-hide,
+  .discovery-panel .muted.small,
+  .discovery-panel .check-list.compact-list {
+    display: none !important;
+  }
+
+  .calldesk-panel,
+  .discovery-panel,
+  .wrapup-panel,
+  .client-snapshot-panel,
+  .recommendation-panel {
+    border-radius: 16px !important;
+  }
+
+  .calldesk-panel .panel-header.compact {
+    margin-bottom: 8px !important;
+  }
+
+  .calldesk-panel h3 {
+    font-size: 1rem !important;
+    line-height: 1.25 !important;
+  }
+
+  .calldesk-form,
+  .workflow-form {
+    gap: 10px !important;
+  }
+
+  .calldesk-form label span,
+  .workflow-form label span,
+  .detail-label {
+    font-size: 12px !important;
+  }
+
+  #callDeskTabPanel .calldesk-form input,
+  #callDeskTabPanel .calldesk-form select,
+  #callDeskTabPanel .calldesk-form textarea,
+  #callDeskTabPanel .workflow-form input,
+  #callDeskTabPanel .workflow-form select,
+  #callDeskTabPanel .workflow-form textarea {
+    min-height: 48px !important;
+    font-size: 16px !important;
+    border-radius: 12px !important;
+  }
+
+  #deskCallNotes {
+    min-height: 160px !important;
+  }
+
+  .notes-toolbar {
+    display: grid !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+
+  .notes-toolbar .ghost-button {
+    min-height: 40px !important;
+    padding: 8px 6px !important;
+    font-size: 12px !important;
+  }
+
+  .detail-actions {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+  }
+
+  .detail-actions > * {
+    flex: 1 1 calc(50% - 4px);
+  }
+
+  .detail-actions > .table-summary {
+    flex-basis: 100%;
+  }
+
+  .sync-toggle-row {
+    align-items: center !important;
+    gap: 10px !important;
+    padding: 10px 12px !important;
+    border-radius: 12px !important;
+    background: rgba(18, 28, 44, 0.78) !important;
+  }
+
+  .sync-toggle-native {
+    width: 22px !important;
+    height: 22px !important;
+  }
+
+  #deskSaveToNotesBtn {
+    position: sticky !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + 8px) !important;
+    z-index: 20 !important;
+    width: 100% !important;
+    min-height: 52px !important;
+    margin-top: 6px !important;
+    box-shadow: 0 14px 32px rgba(8, 15, 26, 0.35) !important;
+  }
+
+  .discovery-split {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  .discovery-group {
+    display: grid !important;
+    gap: 10px !important;
+  }
+
+  .discovery-group-title {
+    margin-bottom: 0 !important;
+    font-size: 13px !important;
+  }
+
+  .mobile-secondary-field {
+    display: none !important;
+  }
+
+  .recommendation-panel .advisor-block {
+    padding: 10px 0 !important;
+  }
+
+  .recommendation-panel .advisor-block:not(:first-child) {
+    border-top: 1px solid rgba(117, 155, 194, 0.14) !important;
+  }
+
+  .recommendation-panel .advisor-block:nth-child(n + 4) {
+    display: none !important;
+  }
+
+  .portal-user-shell {
+    width: 100% !important;
+    justify-content: flex-end !important;
   }
 }
 

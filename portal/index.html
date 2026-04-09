@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Insurance Ops Dashboard</title>
-    <link rel="stylesheet" href="./styles.css" />
+    <link rel="stylesheet" href="./styles.css?v=20260409-25" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       window.PORTAL_CONFIG = {
@@ -366,6 +366,7 @@
         <div class="top-nav-right">
           <div class="portal-user-shell">
             <span id="portalUserEmail" class="portal-user-email" hidden></span>
+            <span id="portalUserRole" class="portal-user-role" hidden></span>
             <button id="portalLogoutBtn" class="ghost-button slim" type="button" hidden>Log Out</button>
           </div>
           <div id="topStatusPills" class="top-status-pills" title="Readiness status">
@@ -610,7 +611,7 @@
         <div id="callDeskTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="callDeskTabButton" hidden>
           <section class="calldesk-stage">
             <div class="calldesk-column calldesk-left">
-              <article class="panel calldesk-panel">
+              <article class="panel calldesk-panel client-snapshot-panel">
                 <div class="panel-header compact"><div><p class="panel-label">Step 1</p><h3>Client snapshot</h3></div></div>
                 <div class="detail-actions"><button id="deskCreateLeadBtn" class="ghost-button slim" type="button">Start new lead</button><span id="deskLeadPickerStatus" class="table-summary" aria-live="polite">Load a lead from Lead Selection.</span></div>
                 <div class="calldesk-form calldesk-form-compact">
@@ -622,7 +623,7 @@
                 </div>
               </article>
 
-              <article class="panel calldesk-panel">
+              <article class="panel calldesk-panel wrapup-panel">
                 <div class="panel-header compact"><div><p class="panel-label">Step 3</p><h3>Call wrap-up and disposition</h3></div><div class="detail-actions"><button id="deskScriptDrawerToggleBtn" class="ghost-button slim" type="button">Scripts</button><div id="callDeskStatus" class="table-summary" aria-live="polite">Ready</div></div></div>
                 <div class="calldesk-form calldesk-form-compact">
                   <label><span>Need/goal summary</span><input id="deskGoalNote" type="text" /></label>
@@ -658,7 +659,7 @@
 
             <div class="calldesk-column calldesk-center">
               <div id="deskScriptToast" class="desk-toast" hidden></div>
-              <article class="panel calldesk-panel">
+              <article class="panel calldesk-panel discovery-panel">
                 <div class="panel-header compact"><div><p class="panel-label">Step 2</p><h3>Discovery</h3></div></div>
                 <p class="muted small dense-hide">Order: clarify problem -> confirm coverage -> branch -> recommend.</p>
                 <ul class="check-list compact-list dense-hide"><li>2A. Clarify the real problem today</li><li>2B. Confirm existing policy and replacement intent</li><li>2C. Complete health/life qualification before quote</li></ul>
@@ -666,28 +667,28 @@
                   <div class="discovery-split">
                     <div class="discovery-group discovery-column">
                       <h4 class="discovery-group-title">Qualification</h4>
-                      <div class="discovery-field"><label data-field-id="deskAge"><span>Age</span><select id="deskAge"><option value="">Select</option><option value="under50">Under 50</option><option value="50to64">50-64</option><option value="65to75">65-75</option><option value="76plus">76+</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskTobacco"><span>Tobacco</span><select id="deskTobacco"><option value="">Select</option><option value="no">No</option><option value="yes">Yes</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskHealth"><span>Health posture</span><select id="deskHealth"><option value="">Select</option><option value="healthy">Healthy</option><option value="managed">Managed</option><option value="challenging">Challenging</option></select><span class="field-helper">Select 'Challenging' if 2+ major medications.</span></label></div>
-                      <div class="discovery-field"><label data-field-id="deskMedicareFlag"><span>Medicare flag</span><select id="deskMedicareFlag"><option value="">Select</option><option value="yes">Yes</option><option value="soon">Soon</option><option value="no">No</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskLifeFeasibility"><span>Life feasibility</span><select id="deskLifeFeasibility"><option value="">Select</option><option value="healthy">Healthy</option><option value="managed">Managed</option><option value="challenging">Challenging</option><option value="unknown">Unknown</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskHealthCoverageType"><span>Health coverage type</span><select id="deskHealthCoverageType"><option value="">Select</option><option value="under65">Under65</option><option value="medicare">Medicare</option><option value="smallgroup">Small group</option><option value="gap">Gap</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskHealthNeed"><span>Health need</span><select id="deskHealthNeed"><option value="">Select</option><option value="premium">Premium</option><option value="doctors">Doctors</option><option value="rx">RX</option><option value="deductible">Deductible</option><option value="lost_coverage">Lost coverage</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskHealthPriority"><span>Health priority</span><select id="deskHealthPriority"><option value="">Select</option><option value="today">Today</option><option value="soon">Soon</option><option value="review">Review</option></select></label></div>
+                      <div class="discovery-field mobile-core-field"><label data-field-id="deskAge"><span>Age</span><select id="deskAge"><option value="">Select</option><option value="under50">Under 50</option><option value="50to64">50-64</option><option value="65to75">65-75</option><option value="76plus">76+</option></select></label></div>
+                      <div class="discovery-field mobile-core-field"><label data-field-id="deskTobacco"><span>Tobacco</span><select id="deskTobacco"><option value="">Select</option><option value="no">No</option><option value="yes">Yes</option></select></label></div>
+                      <div class="discovery-field mobile-core-field"><label data-field-id="deskHealth"><span>Health posture</span><select id="deskHealth"><option value="">Select</option><option value="healthy">Healthy</option><option value="managed">Managed</option><option value="challenging">Challenging</option></select><span class="field-helper">Select 'Challenging' if 2+ major medications.</span></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskMedicareFlag"><span>Medicare flag</span><select id="deskMedicareFlag"><option value="">Select</option><option value="yes">Yes</option><option value="soon">Soon</option><option value="no">No</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskLifeFeasibility"><span>Life feasibility</span><select id="deskLifeFeasibility"><option value="">Select</option><option value="healthy">Healthy</option><option value="managed">Managed</option><option value="challenging">Challenging</option><option value="unknown">Unknown</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskHealthCoverageType"><span>Health coverage type</span><select id="deskHealthCoverageType"><option value="">Select</option><option value="under65">Under65</option><option value="medicare">Medicare</option><option value="smallgroup">Small group</option><option value="gap">Gap</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskHealthNeed"><span>Health need</span><select id="deskHealthNeed"><option value="">Select</option><option value="premium">Premium</option><option value="doctors">Doctors</option><option value="rx">RX</option><option value="deductible">Deductible</option><option value="lost_coverage">Lost coverage</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskHealthPriority"><span>Health priority</span><select id="deskHealthPriority"><option value="">Select</option><option value="today">Today</option><option value="soon">Soon</option><option value="review">Review</option></select></label></div>
                     </div>
                     <div class="discovery-group discovery-column">
                       <h4 class="discovery-group-title">Intent &amp; Budget</h4>
-                      <div class="discovery-field"><label data-field-id="deskProductPath"><span>Product path</span><select id="deskProductPath"><option value="">Select</option><option value="health">Health</option><option value="life">Life</option><option value="both">Both</option><option value="unclear">Unclear</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskNeedArea"><span>Need area</span><select id="deskNeedArea"><option value="">Select</option><option value="health">Health</option><option value="life">Life</option><option value="both">Both</option><option value="unclear">Unclear</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskCurrentCoverage"><span>Current coverage</span><input id="deskCurrentCoverage" type="text" /></label></div>
-                      <div class="discovery-field"><label><span>Existing policy</span><select id="deskExistingPolicy"><option value="">Select</option><option value="yes">Yes</option><option value="no">No</option><option value="unknown">Unknown</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskPolicyIntent"><span>Policy intent</span><select id="deskPolicyIntent"><option value="">Select</option><option value="replace">Replace</option><option value="supplement">Supplement</option><option value="new">New</option><option value="unknown">Unknown</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskDecisionMaker"><span>Decision maker</span><input id="deskDecisionMaker" type="text" /></label></div>
-                      <div class="discovery-field"><label><span>Decision timeline</span><input id="deskDecisionTimeline" type="text" /></label></div>
-                      <div class="discovery-field"><label data-field-id="deskGoal"><span>Goal</span><select id="deskGoal"><option value="">Select</option><option value="income">Income</option><option value="burial">Burial</option><option value="permanent">Permanent</option><option value="retirement">Retirement</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskBudget"><span>Budget level</span><select id="deskBudget"><option value="">Select</option><option value="low">Low</option><option value="mid">Mid</option><option value="high">High</option></select></label></div>
-                      <div class="discovery-field"><label data-field-id="deskDuration"><span>Duration</span><select id="deskDuration"><option value="">Select</option><option value="temporary">Temporary</option><option value="lifelong">Lifelong</option></select></label></div>
-                      <div class="discovery-field"><label><span>Speed vs optimize</span><select id="deskSpeed"><option value="">Select</option><option value="speed">Speed</option><option value="balanced">Balanced</option><option value="optimize">Optimize</option></select></label></div>
+                      <div class="discovery-field mobile-core-field"><label data-field-id="deskProductPath"><span>Product path</span><select id="deskProductPath"><option value="">Select</option><option value="health">Health</option><option value="life">Life</option><option value="both">Both</option><option value="unclear">Unclear</option></select></label></div>
+                      <div class="discovery-field mobile-core-field"><label data-field-id="deskNeedArea"><span>Need area</span><select id="deskNeedArea"><option value="">Select</option><option value="health">Health</option><option value="life">Life</option><option value="both">Both</option><option value="unclear">Unclear</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskCurrentCoverage"><span>Current coverage</span><input id="deskCurrentCoverage" type="text" /></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label><span>Existing policy</span><select id="deskExistingPolicy"><option value="">Select</option><option value="yes">Yes</option><option value="no">No</option><option value="unknown">Unknown</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskPolicyIntent"><span>Policy intent</span><select id="deskPolicyIntent"><option value="">Select</option><option value="replace">Replace</option><option value="supplement">Supplement</option><option value="new">New</option><option value="unknown">Unknown</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskDecisionMaker"><span>Decision maker</span><input id="deskDecisionMaker" type="text" /></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label><span>Decision timeline</span><input id="deskDecisionTimeline" type="text" /></label></div>
+                      <div class="discovery-field mobile-core-field"><label data-field-id="deskGoal"><span>Goal</span><select id="deskGoal"><option value="">Select</option><option value="income">Income</option><option value="burial">Burial</option><option value="permanent">Permanent</option><option value="retirement">Retirement</option></select></label></div>
+                      <div class="discovery-field mobile-core-field"><label data-field-id="deskBudget"><span>Budget level</span><select id="deskBudget"><option value="">Select</option><option value="low">Low</option><option value="mid">Mid</option><option value="high">High</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label data-field-id="deskDuration"><span>Duration</span><select id="deskDuration"><option value="">Select</option><option value="temporary">Temporary</option><option value="lifelong">Lifelong</option></select></label></div>
+                      <div class="discovery-field mobile-secondary-field"><label><span>Speed vs optimize</span><select id="deskSpeed"><option value="">Select</option><option value="speed">Speed</option><option value="balanced">Balanced</option><option value="optimize">Optimize</option></select></label></div>
                     </div>
                   </div>
                 </div>
@@ -719,7 +720,7 @@
                 <ul id="deskReadinessList" class="check-list compact-list"></ul>
               </article>
 
-              <article class="panel calldesk-panel">
+              <article class="panel calldesk-panel recommendation-panel">
                 <div class="panel-header compact"><div><p class="panel-label">Recommendation</p><h3 id="deskRecommendationTitle">Quote order and lane</h3></div></div>
                 <div class="advisor-block"><p class="detail-label">Lane</p><p id="deskWorkflowLane" class="detail-copy">Answer discovery questions.</p></div>
                 <div class="advisor-block"><p class="detail-label">Primary</p><div id="deskWorkflowPrimary" class="option-chip-list"></div></div>
