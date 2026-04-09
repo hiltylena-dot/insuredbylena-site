@@ -95,7 +95,37 @@ const state = {
     },
   },
   sourcedLeadState: {},
+  auth: {
+    profile: null,
+    role: "guest",
+  },
 };
+
+function normalizePortalRole(role) {
+  const value = String(role || "").trim().toLowerCase();
+  if (value === "admin" || value === "approver" || value === "editor") return value;
+  return "guest";
+}
+
+function roleLabel(role) {
+  const normalized = normalizePortalRole(role);
+  if (normalized === "admin") return "Admin";
+  if (normalized === "approver") return "Approver";
+  if (normalized === "editor") return "Editor";
+  return "Guest";
+}
+
+function canEditContent() {
+  return ["admin", "approver", "editor"].includes(normalizePortalRole(state.auth?.role));
+}
+
+function canApproveContent() {
+  return ["admin", "approver"].includes(normalizePortalRole(state.auth?.role));
+}
+
+function canPublishContent() {
+  return normalizePortalRole(state.auth?.role) === "admin";
+}
 
 function getContentDraftOverride(postId) {
   const normalized = String(postId || "").trim();
@@ -238,17 +268,64 @@ function setAuthLocked(locked) {
   document.body.classList.toggle("auth-locked", Boolean(locked));
 }
 
-function setPortalUser(session) {
+function setPortalUser(session, profile = null) {
   const email = session?.user?.email || "";
   const emailNode = document.getElementById("portalUserEmail");
+  const roleNode = document.getElementById("portalUserRole");
   const logoutBtn = document.getElementById("portalLogoutBtn");
+  const role = normalizePortalRole(profile?.role);
   if (emailNode) {
     emailNode.textContent = email;
     emailNode.hidden = !email;
   }
+  if (roleNode) {
+    roleNode.textContent = roleLabel(role);
+    roleNode.hidden = !email;
+  }
   if (logoutBtn) {
     logoutBtn.hidden = !email;
   }
+}
+
+async function fetchPortalProfile(userId) {
+  if (!supabase || !String(userId || "").trim()) return null;
+  const { data, error } = await supabase
+    .from("app_user_profile")
+    .select("user_id,email,full_name,role")
+    .eq("user_id", String(userId))
+    .maybeSingle();
+  if (error) throw error;
+  return data || null;
+}
+
+function applyContentStudioRolePermissions() {
+  const role = normalizePortalRole(state.auth?.role);
+  document.body.dataset.portalRole = role;
+
+  const configs = [
+    { ids: ["contentSaveBtn", "contentStepSaveBtn", "contentCopyCanvaHandoffBtn", "contentPreviewCopyCanvaBtn", "contentOpenCanvaDesignBtn"], allowed: canEditContent(), reason: "Editors, approvers, or admins can edit Content Studio posts." },
+    { ids: ["contentSubmitReviewBtn", "contentRequestChangesBtn"], allowed: canEditContent(), reason: "Editors, approvers, or admins can move posts through review." },
+    { ids: ["contentApproveBtn", "contentStepApproveBtn", "contentScheduleBtn", "contentStepScheduleBtn", "contentBulkApproveBtn", "contentBulkScheduleBtn"], allowed: canApproveContent(), reason: "Only approvers or admins can approve and schedule content." },
+    { ids: ["contentRunPublishBtn", "contentRunPublishTopBtn", "contentStepPublishBtn"], allowed: canPublishContent(), reason: "Only admins can publish posts to Buffer." },
+  ];
+
+  configs.forEach(({ ids, allowed, reason }) => {
+    ids.forEach((id) => {
+      const node = document.getElementById(id);
+      if (!node) return;
+      node.disabled = !allowed;
+      node.setAttribute("aria-disabled", allowed ? "false" : "true");
+      if (!allowed) {
+        node.setAttribute("data-role-disabled", "true");
+        node.title = reason;
+        node.setAttribute("data-disabled-reason", reason);
+      } else {
+        node.removeAttribute("data-role-disabled");
+        node.removeAttribute("title");
+        node.removeAttribute("data-disabled-reason");
+      }
+    });
+  });
 }
 
 function toIsoOrNull(value) {
@@ -5479,14 +5556,18 @@ function applyContentAssetPlaceholderGuard() {
   ].forEach((id) => {
     const button = document.getElementById(id);
     if (!button) return;
+    const roleBlocked = button.getAttribute("data-role-disabled") === "true";
     button.setAttribute("aria-disabled", blocked ? "true" : "false");
     if (blocked) {
+      if (!roleBlocked) button.disabled = true;
       button.title = tooltip;
       button.setAttribute("data-disabled-reason", tooltip);
     } else {
-      button.disabled = false;
-      button.removeAttribute("title");
-      button.removeAttribute("data-disabled-reason");
+      if (!roleBlocked) {
+        button.disabled = false;
+        button.removeAttribute("title");
+        button.removeAttribute("data-disabled-reason");
+      }
     }
   });
 }
@@ -6267,6 +6348,10 @@ async function loadContentRevisionsOnly() {
 }
 
 async function saveSelectedContentDraft() {
+  if (!canEditContent()) {
+    setContentStudioStatus("Your role cannot edit Content Studio posts.");
+    return;
+  }
   const post = getSelectedContentPost();
   if (!post) {
     setContentStudioStatus("Select a post first.");
@@ -6309,6 +6394,15 @@ async function saveSelectedContentDraft() {
 }
 
 async function runContentAction(action) {
+  if (action === "approve" || action === "schedule") {
+    if (!canApproveContent()) {
+      setContentStudioStatus("Your role cannot approve or schedule posts.");
+      return;
+    }
+  } else if (!canEditContent()) {
+    setContentStudioStatus("Your role cannot update Content Studio posts.");
+    return;
+  }
   const post = getSelectedContentPost();
   if (!post) {
     setContentStudioStatus("Select a post first.");
@@ -6358,6 +6452,15 @@ async function runContentAction(action) {
 }
 
 async function runBulkContentAction(action) {
+  if (action === "approve" || action === "schedule") {
+    if (!canApproveContent()) {
+      setContentStudioStatus("Your role cannot run this bulk approval action.");
+      return;
+    }
+  } else if (!canEditContent()) {
+    setContentStudioStatus("Your role cannot update Content Studio posts.");
+    return;
+  }
   const selectedIds = Array.from(new Set((state.ui.contentSelectedPostIds || []).map((id) => String(id).trim()).filter(Boolean)));
   if (!selectedIds.length) {
     setContentStudioStatus("Select one or more posts first.");
@@ -6394,6 +6497,10 @@ async function runBulkContentAction(action) {
 }
 
 async function restoreContentRevision(revisionId) {
+  if (!canEditContent()) {
+    setContentStudioStatus("Your role cannot restore revisions.");
+    return;
+  }
   const post = getSelectedContentPost();
   if (!post) {
     setContentStudioStatus("Select a post first.");
@@ -6422,6 +6529,10 @@ async function restoreContentRevision(revisionId) {
 }
 
 async function runContentPublish() {
+  if (!canPublishContent()) {
+    setContentStudioStatus("Only admins can publish posts.");
+    return;
+  }
   const flow = getContentPublishFlowState();
   if (flow.post) {
     if (!flow.approved || !flow.hasSchedule || !flow.hasAsset) {
@@ -8455,15 +8566,28 @@ async function initialize() {
 async function bootstrapPortalAuth() {
   setAuthLocked(true);
   setAuthStatus("Checking session…");
+  applyContentStudioRolePermissions();
 
   const session = await ensureAuthenticatedSession();
   if (session) {
-    setPortalUser(session);
+    let profile = null;
+    try {
+      profile = await fetchPortalProfile(session.user?.id);
+    } catch (error) {
+      console.error("Could not load portal profile:", error);
+    }
+    state.auth.profile = profile;
+    state.auth.role = normalizePortalRole(profile?.role);
+    setPortalUser(session, profile);
+    applyContentStudioRolePermissions();
     setAuthLocked(false);
     setAuthStatus("");
     await initialize();
   } else {
-    setPortalUser(null);
+    state.auth.profile = null;
+    state.auth.role = "guest";
+    setPortalUser(null, null);
+    applyContentStudioRolePermissions();
     setAuthLocked(true);
     if (!document.getElementById("authStatus")?.textContent) {
       setAuthStatus("Sign in to open the portal.");
@@ -8473,12 +8597,24 @@ async function bootstrapPortalAuth() {
   if (supabase) {
     supabase.auth.onAuthStateChange(async (_event, sessionUpdate) => {
       if (sessionUpdate) {
-        setPortalUser(sessionUpdate);
+        let profile = null;
+        try {
+          profile = await fetchPortalProfile(sessionUpdate.user?.id);
+        } catch (error) {
+          console.error("Could not load portal profile:", error);
+        }
+        state.auth.profile = profile;
+        state.auth.role = normalizePortalRole(profile?.role);
+        setPortalUser(sessionUpdate, profile);
+        applyContentStudioRolePermissions();
         setAuthLocked(false);
         setAuthStatus("");
         await initialize();
       } else {
-        setPortalUser(null);
+        state.auth.profile = null;
+        state.auth.role = "guest";
+        setPortalUser(null, null);
+        applyContentStudioRolePermissions();
         setAuthLocked(true);
         setAuthStatus("Signed out. Sign in to continue.");
       }
@@ -8755,7 +8891,16 @@ document.getElementById("authForm")?.addEventListener("submit", async (event) =>
   setAuthStatus("Signing in…");
   try {
     const session = await signInToPortal(email, password);
-    setPortalUser(session);
+    let profile = null;
+    try {
+      profile = await fetchPortalProfile(session?.user?.id);
+    } catch (error) {
+      console.error("Could not load portal profile:", error);
+    }
+    state.auth.profile = profile;
+    state.auth.role = normalizePortalRole(profile?.role);
+    setPortalUser(session, profile);
+    applyContentStudioRolePermissions();
     setAuthLocked(false);
     setAuthStatus("");
     await initialize();
