@@ -801,6 +801,48 @@
             <div><p class="eyebrow">Calendar</p><h2>Google-first appointment control</h2></div>
             <div class="hero-badge"><span class="hero-badge-label">Source</span><strong>Openclaw GOG</strong></div>
           </header>
+          <section class="panel-grid">
+            <article class="panel">
+              <div class="panel-header compact">
+                <div><p class="panel-label">Portal Calendar</p><h3>Today</h3></div>
+                <span id="calendarTodayCount" class="table-summary">0</span>
+              </div>
+              <ul id="calendarTodayList" class="check-list compact-list">
+                <li class="muted">No events.</li>
+              </ul>
+            </article>
+            <article class="panel">
+              <div class="panel-header compact">
+                <div><p class="panel-label">Portal Calendar</p><h3>Next 7 Days</h3></div>
+                <span id="calendarWeekCount" class="table-summary">0</span>
+              </div>
+              <ul id="calendarWeekList" class="check-list compact-list">
+                <li class="muted">No events.</li>
+              </ul>
+            </article>
+          </section>
+          <section class="panel">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Follow-up Queue</p><h3>Saved callbacks and follow-ups</h3></div>
+              <span id="calendarLeadQueueCount" class="table-summary">0 queued</span>
+            </div>
+            <div class="table-wrap lead-select-table-wrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Lead</th>
+                    <th>Contact</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="calendarLeadQueueTable">
+                  <tr><td colspan="5" class="muted">No scheduled follow-ups in local lead records.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
           <section class="panel content-queue-section">
             <iframe
               id="calendarEmbedFrame"
@@ -1093,6 +1135,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260408-16"></script>
+    <script type="module" src="./app.js?v=20260408-17"></script>
   </body>
 </html>
