@@ -4500,10 +4500,6 @@ function updateSaveButtonAvailability() {
     btn.disabled = true;
     return;
   }
-  if (state.ui.saveStatus === "success") {
-    btn.disabled = true;
-    return;
-  }
   const missing = buildDeskReadinessRequirements().some((item) => !item.value);
   btn.disabled = missing && !canBypassReadinessForSave();
 }
@@ -7302,7 +7298,7 @@ function setSaveStatus(status, labelOverride = "") {
     return;
   }
   if (status === "success") {
-    btn.disabled = true;
+    btn.disabled = false;
     btn.textContent = labelOverride || "Saved to CRM ✅";
     return;
   }
