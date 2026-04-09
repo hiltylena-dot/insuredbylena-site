@@ -154,8 +154,7 @@ const ACTIVE_SESSION_STORAGE_KEY = "openclaw_active_session";
 const LEAD_SELECTION_MAX_ROWS = 250;
 const GOOGLE_WEBHOOK_URL =
   "https://script.google.com/macros/s/AKfycbxWyhM9FG7Jwd9iri4ppb0699ohLRGHMpdXFFp047B2FabnSUUzBEv0k7Vw-t0MA-3xpQ/exec";
-const GOOGLE_CALENDAR_WEB_APP_URL =
-  "https://script.google.com/macros/s/AKfycbyAR3KESTDmaOQBNBW8uxgBJTjJmnECQ8bIrbwAFfZGAznwwoHTR8lpJJvJ6g70dZJg/exec";
+const GOOGLE_CALENDAR_WEB_APP_URL = "";
 const GOOGLE_CALENDAR_WEB_APP_SECRET = "Lvmh0509";
 const LOCAL_DB_SYNC_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/sync` : "";
 const LOCAL_DB_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/import` : "";
@@ -7538,11 +7537,8 @@ async function saveLeadData() {
           window.alert(`Portal scheduling failed:\n\n${portalScheduleWarning}`);
         }, 0);
       } else if (shouldSchedule && googleCalendarWarning) {
-        statusEl.textContent = `Saved and scheduled in portal. Google Calendar needs attention: ${googleCalendarWarning}`;
-        successButtonLabel = "Saved - Google Calendar needs attention";
-        window.setTimeout(() => {
-          window.alert(`Google Calendar needs attention:\n\n${googleCalendarWarning}`);
-        }, 0);
+        statusEl.textContent = `Saved and scheduled in portal. Google Calendar sync is off for now.`;
+        successButtonLabel = "Saved and scheduled ✅";
       } else {
         statusEl.textContent = shouldSchedule && supabase
           ? "Saved and scheduled in portal."
