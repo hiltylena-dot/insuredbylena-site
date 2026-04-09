@@ -463,7 +463,7 @@ function upsertLocalCalendarEvent(event) {
   const startTs = Date.parse(String(event.start || ""));
   const todayStart = Date.parse(startOfDayIso(0));
   const todayEnd = Date.parse(endOfDayIso(0));
-  const weekEnd = Date.parse(endOfDayIso(7));
+  const weekEnd = Date.parse(endOfDayIso(30));
 
   if (Number.isFinite(startTs) && startTs >= todayStart && startTs <= todayEnd) {
     state.calendarTodayEvents = upsertInto(state.calendarTodayEvents);
@@ -2249,8 +2249,8 @@ async function refreshCalendarTabData() {
         }),
         loadAppointmentsFromSupabase({
           start: startOfDayIso(0),
-          end: endOfDayIso(7),
-          limit: 300,
+          end: endOfDayIso(30),
+          limit: 500,
         }),
       ]);
       state.calendarTodayEvents = todayRows.map((row) => buildCalendarEventFromAppointment(row));
