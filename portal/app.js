@@ -445,6 +445,34 @@ function buildCalendarEventFromAppointment(row = {}) {
   };
 }
 
+function upsertLocalCalendarEvent(event) {
+  if (!event?.lead_external_id || !event?.start) return;
+  const matchesEvent = (row) =>
+    String(row.lead_external_id || "").trim() === String(event.lead_external_id || "").trim()
+    && String(row.start || "").trim() === String(event.start || "").trim();
+
+  const upsertInto = (list) => {
+    const rows = Array.isArray(list) ? [...list] : [];
+    const existingIndex = rows.findIndex(matchesEvent);
+    if (existingIndex >= 0) rows[existingIndex] = event;
+    else rows.unshift(event);
+    rows.sort((a, b) => (Date.parse(String(a.start || "")) || 0) - (Date.parse(String(b.start || "")) || 0));
+    return rows;
+  };
+
+  const startTs = Date.parse(String(event.start || ""));
+  const todayStart = Date.parse(startOfDayIso(0));
+  const todayEnd = Date.parse(endOfDayIso(0));
+  const weekEnd = Date.parse(endOfDayIso(7));
+
+  if (Number.isFinite(startTs) && startTs >= todayStart && startTs <= todayEnd) {
+    state.calendarTodayEvents = upsertInto(state.calendarTodayEvents);
+  }
+  if (Number.isFinite(startTs) && startTs >= todayStart && startTs <= weekEnd) {
+    state.calendarWeekEvents = upsertInto(state.calendarWeekEvents);
+  }
+}
+
 async function loadAppointmentsFromSupabase({ start, end, limit = 200 } = {}) {
   if (!supabase) return [];
   let query = supabase
@@ -7527,6 +7555,18 @@ async function saveLeadData() {
       }
     }
     applySavedPayloadToLeadState(payload);
+    if (shouldSchedule && payload.nextAppointmentTime) {
+      upsertLocalCalendarEvent({
+        summary: `${currentDisposition === "callback" ? "Callback" : "Follow-up"}: ${clientName || "Lead"}`,
+        start: payload.nextAppointmentTime,
+        htmlLink: "",
+        source: "portal",
+        lead_id: 0,
+        lead_external_id: payload.contactId,
+        attendees: payload.email ? [{ email: payload.email }] : [],
+      });
+      renderCalendarTab();
+    }
     // With no-cors, response is opaque; if no error is thrown, treat as success.
     let successButtonLabel = "Saved to CRM ✅";
     if (statusEl) {
