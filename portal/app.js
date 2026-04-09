@@ -8466,6 +8466,25 @@ document.getElementById("leadSelectLoadBtn")?.addEventListener("click", () => {
   setActiveTab("calldesk");
 });
 
+document.getElementById("calendarTabPanel")?.addEventListener("click", (event) => {
+  const loadLeadBtn = event.target.closest("[data-calendar-load-lead]");
+  if (loadLeadBtn) {
+    const leadId = String(loadLeadBtn.dataset.calendarLoadLead || "").trim();
+    if (!leadId) return;
+    loadLeadIntoCallDesk(leadId);
+    setActiveTab("calldesk");
+    return;
+  }
+
+  const loadLocalBtn = event.target.closest("[data-calendar-load-local]");
+  if (loadLocalBtn) {
+    const leadId = String(loadLocalBtn.dataset.calendarLoadLocal || "").trim();
+    if (!leadId) return;
+    loadLeadIntoCallDesk(leadId);
+    setActiveTab("calldesk");
+  }
+});
+
 document.getElementById("campaignSelectVisibleBtn")?.addEventListener("click", () => {
   state.ui.campaignSelectedLeadIds = getCampaignFilteredLeads()
     .slice(0, LEAD_SELECTION_MAX_ROWS)
