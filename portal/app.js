@@ -7449,31 +7449,14 @@ async function saveLeadData() {
       if (!followUpAt) {
         syncWarning = "Saved in portal. Add a follow-up date/time to schedule.";
       } else {
-        let googleScheduleData = {
-          ok: false,
-          calendarEventId: "",
-          nextAppointmentTime: followUpAt,
-        };
         try {
-          try {
-            googleScheduleData = await createGoogleCalendarEvent({
-              clientName,
-              email: lead.email || "",
-              phone: lead.phone || "",
-              scheduledAt: followUpAt,
-              description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
-              durationMinutes: 30,
-            });
-          } catch (calendarError) {
-            syncWarning = String(calendarError?.message || "Google Calendar sync failed.");
-          }
           const scheduleData = supabase
             ? await scheduleAppointmentInSupabase({
                 contactId: payload.contactId,
                 clientName,
                 email: lead.email || "",
                 phone: lead.phone || "",
-                scheduledAt: googleScheduleData.nextAppointmentTime || followUpAt,
+                scheduledAt: followUpAt,
                 description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
                 disposition: currentDisposition,
               })
@@ -7501,8 +7484,24 @@ async function saveLeadData() {
           if (!scheduleData?.ok) {
             throw new Error(String(scheduleData?.error || "Calendar schedule failed"));
           }
-          payload.calendarEventId = String(googleScheduleData.calendarEventId || scheduleData.calendarEventId || "").trim();
-          payload.nextAppointmentTime = String(scheduleData.nextAppointmentTime || googleScheduleData.nextAppointmentTime || followUpAt).trim();
+          payload.calendarEventId = String(scheduleData.calendarEventId || "").trim();
+          payload.nextAppointmentTime = String(scheduleData.nextAppointmentTime || followUpAt).trim();
+
+          try {
+            const googleScheduleData = await createGoogleCalendarEvent({
+              clientName,
+              email: lead.email || "",
+              phone: lead.phone || "",
+              scheduledAt: followUpAt,
+              description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
+              durationMinutes: 30,
+            });
+            payload.calendarEventId = String(
+              googleScheduleData.calendarEventId || payload.calendarEventId || "",
+            ).trim();
+          } catch (calendarError) {
+            syncWarning = String(calendarError?.message || "Google Calendar sync failed.");
+          }
         } catch (scheduleError) {
           syncWarning = String(scheduleError?.message || "Scheduling failed after save.");
         }
@@ -7536,10 +7535,10 @@ async function saveLeadData() {
     let successButtonLabel = "Saved to CRM ✅";
     if (statusEl) {
       if (shouldSchedule && syncWarning) {
-        statusEl.textContent = `Saved in portal. Scheduling needs attention: ${syncWarning}`;
+        statusEl.textContent = `Saved in portal. Google Calendar needs attention: ${syncWarning}`;
         successButtonLabel = "Saved - scheduling needs attention";
         window.setTimeout(() => {
-          window.alert(`Scheduling needs attention:\n\n${syncWarning}`);
+          window.alert(`Google Calendar needs attention:\n\n${syncWarning}`);
         }, 0);
       } else {
         statusEl.textContent = shouldSchedule && supabase
