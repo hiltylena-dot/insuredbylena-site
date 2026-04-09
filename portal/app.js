@@ -4490,7 +4490,7 @@ function buildDeskReadinessRequirements() {
 
 function canBypassReadinessForSave() {
   const disposition = String(document.getElementById("deskDisposition")?.value || "").trim().toLowerCase();
-  return ["callback", "follow_up", "no_answer", "not_qualified"].includes(disposition);
+  return Boolean(disposition);
 }
 
 function updateSaveButtonAvailability() {
