@@ -6,12 +6,20 @@
     <title>Insurance Ops Dashboard</title>
     <link rel="stylesheet" href="./styles.css?v=20260409-26" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+    <script src="./portal-config.js"></script>
     <script>
-      window.PORTAL_CONFIG = {
-        supabaseUrl: "https://ixpdvxumkloytwfezmga.supabase.co",
-        supabasePublishableKey: "sb_publishable_b3eTZFC0Alt2H-49ZTIaiA__K5DidT5",
-        apiBase: ""
-      };
+      (() => {
+        const existing = window.PORTAL_CONFIG || {};
+        const hostname = window.location.hostname || "";
+        const isLocalHost = hostname === "127.0.0.1" || hostname === "localhost";
+        const defaultApiBase = isLocalHost ? "http://127.0.0.1:8787" : `${window.location.origin}/portal-api`;
+        window.PORTAL_CONFIG = {
+          supabaseUrl: "https://ixpdvxumkloytwfezmga.supabase.co",
+          supabasePublishableKey: "sb_publishable_b3eTZFC0Alt2H-49ZTIaiA__K5DidT5",
+          apiBase: defaultApiBase,
+          ...existing,
+        };
+      })();
     </script>
     <style>
       .app-shell {
@@ -458,15 +466,9 @@
                 <div><p class="panel-label">Calendar</p><h3>Today's agenda</h3></div>
                 <div class="table-summary">Openclaw GOG</div>
               </div>
-              <iframe
-                id="dashboardAgendaFrame"
-                title="Today agenda"
-                src=""
-                width="100%"
-                height="260"
-                frameborder="0"
-                scrolling="no"
-              ></iframe>
+              <div id="dashboardAgendaFrame" class="detail-copy">
+                Remote hardening is enabled. Use the portal follow-up queue and calendar lists as the source of truth instead of a private Google embed.
+              </div>
             </article>
           </section>
           <section class="triage-grid" id="triageGrid"></section>
@@ -845,15 +847,9 @@
             </div>
           </section>
           <section class="panel content-queue-section">
-            <iframe
-              id="calendarEmbedFrame"
-              title="Openclaw Google Calendar"
-              src=""
-              width="100%"
-              height="700"
-              frameborder="0"
-              scrolling="no"
-            ></iframe>
+            <div id="calendarEmbedFrame" class="detail-copy">
+              Google Calendar embeds are disabled in the hardened portal because they depend on private calendar access and caused unreliable remote failures. Use the Portal Calendar and Follow-up Queue above for scheduling work.
+            </div>
           </section>
         </div>
 
@@ -1136,6 +1132,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260409-27"></script>
+    <script type="module" src="./app.js?v=20260409-28"></script>
   </body>
 </html>
