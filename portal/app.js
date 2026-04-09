@@ -445,19 +445,36 @@ function buildCalendarEventFromAppointment(row = {}) {
   };
 }
 
+function dedupeCalendarEvents(items = []) {
+  const seen = new Map();
+  for (const item of Array.isArray(items) ? items : []) {
+    const leadKey = String(item?.lead_external_id || "").trim();
+    const fallbackKey = `${String(item?.summary || "").trim()}|${String(item?.start || "").trim()}`;
+    const key = leadKey || fallbackKey;
+    if (!key) continue;
+    const existing = seen.get(key);
+    const itemTs = Date.parse(String(item?.start || "")) || 0;
+    const existingTs = Date.parse(String(existing?.start || "")) || 0;
+    if (!existing || itemTs >= existingTs) {
+      seen.set(key, item);
+    }
+  }
+  return Array.from(seen.values()).sort(
+    (a, b) => (Date.parse(String(a?.start || "")) || 0) - (Date.parse(String(b?.start || "")) || 0),
+  );
+}
+
 function upsertLocalCalendarEvent(event) {
   if (!event?.lead_external_id || !event?.start) return;
   const matchesEvent = (row) =>
-    String(row.lead_external_id || "").trim() === String(event.lead_external_id || "").trim()
-    && String(row.start || "").trim() === String(event.start || "").trim();
+    String(row.lead_external_id || "").trim() === String(event.lead_external_id || "").trim();
 
   const upsertInto = (list) => {
     const rows = Array.isArray(list) ? [...list] : [];
     const existingIndex = rows.findIndex(matchesEvent);
     if (existingIndex >= 0) rows[existingIndex] = event;
     else rows.unshift(event);
-    rows.sort((a, b) => (Date.parse(String(a.start || "")) || 0) - (Date.parse(String(b.start || "")) || 0));
-    return rows;
+    return dedupeCalendarEvents(rows);
   };
 
   const startTs = Date.parse(String(event.start || ""));
@@ -2159,7 +2176,7 @@ function renderCalendarEventList(listId, countId, items) {
   const listEl = document.getElementById(listId);
   const countEl = document.getElementById(countId);
   if (!listEl || !countEl) return;
-  const rows = Array.isArray(items) ? items : [];
+  const rows = dedupeCalendarEvents(items);
   countEl.textContent = String(rows.length);
   if (!rows.length) {
     listEl.innerHTML = `<li class="muted">No events.</li>`;
@@ -2199,13 +2216,23 @@ function renderCalendarLeadQueue() {
   const table = document.getElementById("calendarLeadQueueTable");
   const countEl = document.getElementById("calendarLeadQueueCount");
   if (!table || !countEl) return;
-  const rows = state.leads
-    .filter((lead) => String(lead.next_appointment_time || "").trim())
-    .sort((a, b) => {
-      const aTs = Date.parse(String(a.next_appointment_time || "")) || Number.MAX_SAFE_INTEGER;
-      const bTs = Date.parse(String(b.next_appointment_time || "")) || Number.MAX_SAFE_INTEGER;
-      return aTs - bTs;
-    });
+  const byLeadId = new Map();
+  for (const lead of state.leads) {
+    const leadId = String(lead?.lead_external_id || "").trim();
+    const nextAt = String(lead?.next_appointment_time || "").trim();
+    if (!leadId || !nextAt) continue;
+    const existing = byLeadId.get(leadId);
+    const leadTs = Date.parse(nextAt) || Number.MAX_SAFE_INTEGER;
+    const existingTs = Date.parse(String(existing?.next_appointment_time || "")) || Number.MAX_SAFE_INTEGER;
+    if (!existing || leadTs >= existingTs) {
+      byLeadId.set(leadId, lead);
+    }
+  }
+  const rows = Array.from(byLeadId.values()).sort((a, b) => {
+    const aTs = Date.parse(String(a.next_appointment_time || "")) || Number.MAX_SAFE_INTEGER;
+    const bTs = Date.parse(String(b.next_appointment_time || "")) || Number.MAX_SAFE_INTEGER;
+    return aTs - bTs;
+  });
   countEl.textContent = `${rows.length} queued`;
   if (!rows.length) {
     table.innerHTML = `<tr><td colspan="5" class="muted">No scheduled follow-ups in local lead records.</td></tr>`;
