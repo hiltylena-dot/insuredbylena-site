@@ -448,9 +448,10 @@ function buildCalendarEventFromAppointment(row = {}) {
 function dedupeCalendarEvents(items = []) {
   const seen = new Map();
   for (const item of Array.isArray(items) ? items : []) {
+    const internalLeadKey = Number(item?.lead_id || 0) > 0 ? `lead:${Number(item.lead_id)}` : "";
     const leadKey = String(item?.lead_external_id || "").trim();
     const fallbackKey = `${String(item?.summary || "").trim()}|${String(item?.start || "").trim()}`;
-    const key = leadKey || fallbackKey;
+    const key = internalLeadKey || leadKey || fallbackKey;
     if (!key) continue;
     const existing = seen.get(key);
     const itemTs = Date.parse(String(item?.start || "")) || 0;
@@ -2218,14 +2219,17 @@ function renderCalendarLeadQueue() {
   if (!table || !countEl) return;
   const byLeadId = new Map();
   for (const lead of state.leads) {
+    const internalLeadId = Number(lead?.lead_id || 0);
     const leadId = String(lead?.lead_external_id || "").trim();
     const nextAt = String(lead?.next_appointment_time || "").trim();
-    if (!leadId || !nextAt) continue;
-    const existing = byLeadId.get(leadId);
+    if (!nextAt) continue;
+    const dedupeKey = internalLeadId > 0 ? `lead:${internalLeadId}` : leadId;
+    if (!dedupeKey) continue;
+    const existing = byLeadId.get(dedupeKey);
     const leadTs = Date.parse(nextAt) || Number.MAX_SAFE_INTEGER;
     const existingTs = Date.parse(String(existing?.next_appointment_time || "")) || Number.MAX_SAFE_INTEGER;
     if (!existing || leadTs >= existingTs) {
-      byLeadId.set(leadId, lead);
+      byLeadId.set(dedupeKey, lead);
     }
   }
   const rows = Array.from(byLeadId.values()).sort((a, b) => {
