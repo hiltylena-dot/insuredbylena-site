@@ -6,18 +6,17 @@
     <title>Insurance Ops Dashboard</title>
     <link rel="stylesheet" href="./styles.css?v=20260409-26" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
-    <script src="./portal-config.js"></script>
     <script>
       (() => {
-        const existing = window.PORTAL_CONFIG || {};
         const hostname = window.location.hostname || "";
         const isLocalHost = hostname === "127.0.0.1" || hostname === "localhost";
-        const defaultApiBase = isLocalHost ? "http://127.0.0.1:8787" : `${window.location.origin}/portal-api`;
+        const defaultApiBase = isLocalHost
+          ? "http://127.0.0.1:8787"
+          : "https://insuredbylena-portal-api-607620457436.us-central1.run.app";
         window.PORTAL_CONFIG = {
           supabaseUrl: "https://ixpdvxumkloytwfezmga.supabase.co",
           supabasePublishableKey: "sb_publishable_b3eTZFC0Alt2H-49ZTIaiA__K5DidT5",
           apiBase: defaultApiBase,
-          ...existing,
         };
       })();
     </script>
