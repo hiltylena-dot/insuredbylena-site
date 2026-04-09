@@ -155,7 +155,7 @@ const LEAD_SELECTION_MAX_ROWS = 250;
 const GOOGLE_WEBHOOK_URL =
   "https://script.google.com/macros/s/AKfycbxWyhM9FG7Jwd9iri4ppb0699ohLRGHMpdXFFp047B2FabnSUUzBEv0k7Vw-t0MA-3xpQ/exec";
 const GOOGLE_CALENDAR_WEB_APP_URL =
-  "https://script.google.com/macros/s/AKfycbxk1dJdN9crf7AuEmF0ddHqIKXRTCO9e0TJSjLMHyR43L71tDAc4DWmERLq3OAN6JN7/exec";
+  "https://script.google.com/macros/s/AKfycbyAR3KESTDmaOQBNBW8uxgBJTjJmnECQ8bIrbwAFfZGAznwwoHTR8lpJJvJ6g70dZJg/exec";
 const GOOGLE_CALENDAR_WEB_APP_SECRET = "Lvmh0509";
 const LOCAL_DB_SYNC_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/sync` : "";
 const LOCAL_DB_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/import` : "";
