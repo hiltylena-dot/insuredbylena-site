@@ -354,9 +354,9 @@
         <div class="top-nav-left">
           <strong class="top-brand">OPENCLAW OPS</strong>
           <div class="tab-strip" role="tablist" aria-label="Dashboard views">
-            <button id="dashboardTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="dashboardTabPanel" data-tab="dashboard">1. Ops Dashboard</button>
+            <button id="dashboardTabButton" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="dashboardTabPanel" data-tab="dashboard">1. Ops Dashboard</button>
             <button id="leadSelectionTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="leadSelectionTabPanel" data-tab="leadselection">2. Lead Selection</button>
-            <button id="callDeskTabButton" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="callDeskTabPanel" data-tab="calldesk">3. Call Desk</button>
+            <button id="callDeskTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="callDeskTabPanel" data-tab="calldesk">3. Call Desk</button>
             <button id="campaignTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="campaignTabPanel" data-tab="campaign">4. Campaign</button>
             <button id="calendarTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="calendarTabPanel" data-tab="calendar">5. Calendar</button>
             <button id="pipelineTabButton" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="pipelineTabPanel" data-tab="pipeline">6. Pipeline</button>
@@ -389,7 +389,7 @@
       <main class="main-panel">
         <p class="table-summary dense-hide">Flow: triage -> select lead -> cleanup (phone/email format) -> call desk -> campaign -> pipeline.</p>
 
-        <div id="dashboardTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="dashboardTabButton" hidden>
+        <div id="dashboardTabPanel" class="tab-panel active" role="tabpanel" aria-labelledby="dashboardTabButton">
           <header class="hero">
             <div>
               <p class="eyebrow">Lead Command Center</p>
@@ -607,7 +607,7 @@
           </section>
         </div>
 
-        <div id="callDeskTabPanel" class="tab-panel active" role="tabpanel" aria-labelledby="callDeskTabButton">
+        <div id="callDeskTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="callDeskTabButton" hidden>
           <section class="calldesk-stage">
             <div class="calldesk-column calldesk-left">
               <article class="panel calldesk-panel">
@@ -1135,6 +1135,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260408-19"></script>
+    <script type="module" src="./app.js?v=20260408-20"></script>
   </body>
 </html>

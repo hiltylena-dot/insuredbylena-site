@@ -8621,5 +8621,5 @@ attachContentStudioHandlers();
 syncWorkflowControls();
 renderCallDeskBranching();
 renderWorkflowAdvisor();
-setActiveTab("calldesk");
+setActiveTab("dashboard");
 bootstrapPortalAuth();
