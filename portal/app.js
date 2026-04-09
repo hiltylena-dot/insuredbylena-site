@@ -373,6 +373,38 @@ async function saveLeadToSupabase(row) {
   return data || payload;
 }
 
+async function saveCallDeskLeadToSupabase(payload = {}, options = {}) {
+  if (!supabase) throw new Error("Supabase lead store is not configured.");
+  const rpcPayload = {
+    ...payload,
+    fullName: String(options.clientName || "").trim(),
+    email: String(options.email || payload.email || "").trim(),
+    phone: String(options.phone || payload.phone || "").trim(),
+    nextAppointmentTime: String(options.followUpAt || payload.nextAppointmentTime || "").trim(),
+    shouldSchedule: Boolean(options.shouldSchedule),
+    leadSource: "call_desk",
+    leadSourceDetail: "manual_call_desk_entry",
+    productLine: String(
+      payload.productLine
+      || payload.product_line
+      || document.getElementById("deskCoverage")?.value
+      || "",
+    ).trim(),
+    productInterest: String(
+      payload.productInterest
+      || payload.product_interest
+      || document.getElementById("deskProductPath")?.value
+      || "",
+    ).trim(),
+  };
+  const { data, error } = await supabase.rpc("portal_save_call_desk", {
+    p_payload: rpcPayload,
+  });
+  if (error) throw error;
+  if (!data?.ok) throw new Error(String(data?.error || "Call Desk save failed."));
+  return data;
+}
+
 async function updateLeadPipelineInSupabase(lead, stage) {
   if (!supabase) throw new Error("Supabase lead store is not configured.");
   const leadId = String(lead?.lead_external_id || "").trim();
@@ -411,6 +443,21 @@ function getLeadByInternalId(leadId) {
   const normalized = Number(leadId || 0);
   if (!Number.isFinite(normalized) || normalized <= 0) return null;
   return state.leads.find((row) => Number(row.lead_id || 0) === normalized) || null;
+}
+
+function findExistingLeadMatch({ phone = "", email = "" } = {}) {
+  const normalizedPhone = digitsOnly(phone);
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  return (
+    state.leads.find((row) => {
+      if (!isSyncedLeadRecord(row)) return false;
+      const rowPhone = digitsOnly(row.mobile_phone || "");
+      const rowEmail = String(row.email || "").trim().toLowerCase();
+      if (normalizedPhone && rowPhone && normalizedPhone === rowPhone) return true;
+      if (normalizedEmail && rowEmail && normalizedEmail === rowEmail) return true;
+      return false;
+    }) || null
+  );
 }
 
 function startOfDayIso(offsetDays = 0) {
@@ -7579,14 +7626,28 @@ async function saveLeadData() {
     let portalScheduleWarning = "";
     let googleCalendarWarning = "";
     if (supabase) {
-      const savedLead = await saveLeadToSupabase(payload);
+      const saveResult = await saveCallDeskLeadToSupabase(payload, {
+        clientName,
+        email: lead.email || "",
+        phone: lead.phone || "",
+        followUpAt,
+        shouldSchedule,
+      });
+      const savedLead = saveResult?.lead || null;
       if (savedLead?.lead_external_id) {
         payload.contactId = String(savedLead.lead_external_id || payload.contactId).trim();
+        payload.nextAppointmentTime = String(savedLead.next_appointment_time || payload.nextAppointmentTime || "").trim();
+        payload.calendarEventId = String(saveResult?.calendarEventId || payload.calendarEventId || "").trim();
         upsertLeadIntoState(savedLead);
         removeCreatedLeadByExternalId(payload.contactId);
+        state.ui.selectedCallDeskLeadId = payload.contactId;
+        state.ui.leadId = payload.contactId;
+        state.ui.selectedLeadSelectionId = payload.contactId;
       }
-    }
-    if (shouldSchedule) {
+      if (!saveResult?.scheduledInternally && shouldSchedule) {
+        portalScheduleWarning = "Follow-up was saved, but the portal appointment was not created.";
+      }
+    } else if (shouldSchedule) {
       if (!followUpAt) {
         portalScheduleWarning = "Add a follow-up date/time to schedule.";
       } else {
@@ -7822,6 +7883,14 @@ function createLeadFromCallDesk() {
 
   if (!fullName && !phone) {
     setDeskLeadPickerStatus("Add at least client name or phone before creating a new lead.");
+    return;
+  }
+
+  const existingLead = findExistingLeadMatch({ phone });
+  if (existingLead?.lead_external_id) {
+    loadLeadIntoCallDesk(String(existingLead.lead_external_id || ""));
+    document.getElementById("callDeskStatus").textContent = "Existing lead loaded";
+    setDeskLeadPickerStatus(`Loaded existing lead for ${getLeadDisplayName(existingLead)}.`);
     return;
   }
 
