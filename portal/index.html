@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Insurance Ops Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260409-31" />
+    <link rel="stylesheet" href="./styles.css?v=20260409-34" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       (() => {
@@ -17,6 +17,8 @@
           supabaseUrl: "https://ixpdvxumkloytwfezmga.supabase.co",
           supabasePublishableKey: "sb_publishable_b3eTZFC0Alt2H-49ZTIaiA__K5DidT5",
           apiBase: defaultApiBase,
+          googleCalendarWebAppUrl: "https://script.google.com/macros/s/AKfycbyAR3KESTDmaOQBNBW8uxgBJTjJmnECQ8bIrbwAFfZGAznwwoHTR8lpJJvJ6g70dZJg/exec",
+          googleCalendarSecret: "replace-this-with-a-secret-you-choose",
         };
       })();
     </script>
@@ -344,10 +346,11 @@
           position: static !important;
           height: auto !important;
           min-height: 0 !important;
-          align-items: flex-start !important;
-          gap: 6px !important;
-          padding: 4px 6px !important;
-          flex-direction: column !important;
+          align-items: stretch !important;
+          justify-content: flex-start !important;
+          gap: 0 !important;
+          padding: 4px !important;
+          flex-direction: row !important;
         }
 
         body[data-active-tab="calldesk"] .top-nav-left,
@@ -363,22 +366,23 @@
 
         body[data-active-tab="calldesk"] .top-nav .tab-strip {
           width: 100% !important;
-          padding: 2px !important;
+          padding: 3px !important;
           border-radius: 8px !important;
           gap: 4px !important;
         }
 
         body[data-active-tab="calldesk"] .top-nav .tab-button {
-          padding: 5px 8px !important;
-          font-size: 0.66rem !important;
-          line-height: 1.15 !important;
+          padding: 8px 12px !important;
+          min-height: 38px !important;
+          font-size: 0.74rem !important;
+          line-height: 1.2 !important;
         }
 
         .main-panel {
           height: auto !important;
           min-height: 0 !important;
           overflow: auto !important;
-          padding: 6px !important;
+          padding: 4px !important;
         }
 
         body[data-active-tab="calldesk"] .main-panel,
@@ -399,11 +403,12 @@
         .calldesk-stage {
           display: flex !important;
           flex-direction: column !important;
-          gap: 10px !important;
+          gap: 8px !important;
           height: auto !important;
           max-height: none !important;
           min-height: 0 !important;
           padding: 0 !important;
+          width: 100% !important;
         }
 
         body[data-active-tab="calldesk"] .calldesk-right,
@@ -423,6 +428,17 @@
           display: contents !important;
           height: auto !important;
           overflow: visible !important;
+        }
+
+        body[data-active-tab="calldesk"] .calldesk-panel,
+        body[data-active-tab="calldesk"] .panel,
+        body[data-active-tab="calldesk"] .advisor-block,
+        body[data-active-tab="calldesk"] .detail-actions,
+        body[data-active-tab="calldesk"] .calldesk-form,
+        body[data-active-tab="calldesk"] .workflow-form {
+          width: 100% !important;
+          max-width: none !important;
+          min-width: 0 !important;
         }
 
         .client-snapshot-panel {
@@ -460,7 +476,7 @@
 
         .calldesk-panel {
           border-radius: 14px !important;
-          padding: 10px !important;
+          padding: 12px !important;
         }
 
         .calldesk-panel .panel-header.compact {
@@ -1161,6 +1177,7 @@
                 <div class="detail-actions content-canva-actions">
                   <button id="contentCopyCanvaHandoffBtn" class="ghost-button slim" type="button">Copy Canva Handoff</button>
                   <button id="contentOpenCanvaDesignBtn" class="ghost-button slim" type="button">Open Canva Design</button>
+                  <span id="contentCanvaLinkWarning" class="table-summary" role="status" aria-live="polite">Missing Link</span>
                   <button id="contentOpenAssetBtn" class="ghost-button slim" type="button">Open Final Asset</button>
                 </div>
                 <details class="content-quick-manual">
@@ -1348,6 +1365,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260409-31"></script>
+    <script type="module" src="./app.js?v=20260409-34"></script>
   </body>
 </html>
