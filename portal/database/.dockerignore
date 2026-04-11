@@ -1,0 +1,8 @@
+.env
+*.db
+*.bak
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+insurance_lifecycle*

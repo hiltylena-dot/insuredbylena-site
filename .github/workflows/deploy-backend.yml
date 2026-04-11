@@ -1,0 +1,76 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "portal/database/**"
+      - "portal/tests/**"
+      - ".github/workflows/deploy-backend.yml"
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: Branch, tag, or SHA to deploy
+        required: false
+        default: main
+
+concurrency:
+  group: insuredbylena-backend-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+      REGION: ${{ secrets.GCP_REGION }}
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      GOOGLE_CALENDAR_WEB_APP_URL: ${{ secrets.GOOGLE_CALENDAR_WEB_APP_URL }}
+      GOOGLE_CALENDAR_SECRET: ${{ secrets.GOOGLE_CALENDAR_SECRET }}
+      CONTENT_PUBLISHER_MODE: ${{ secrets.CONTENT_PUBLISHER_MODE }}
+      BUFFER_API_KEY: ${{ secrets.BUFFER_API_KEY }}
+      BUFFER_ORGANIZATION_ID: ${{ secrets.BUFFER_ORGANIZATION_ID }}
+      BUFFER_CHANNEL_ID_INSTAGRAM: ${{ secrets.BUFFER_CHANNEL_ID_INSTAGRAM }}
+      BUFFER_CHANNEL_ID_FACEBOOK: ${{ secrets.BUFFER_CHANNEL_ID_FACEBOOK }}
+      BUFFER_CHANNEL_ID_TIKTOK: ${{ secrets.BUFFER_CHANNEL_ID_TIKTOK }}
+      BUFFER_API_BASE_URL: ${{ secrets.BUFFER_API_BASE_URL }}
+      CONTENT_SCHEDULER_WEBHOOK_URL: ${{ secrets.CONTENT_SCHEDULER_WEBHOOK_URL }}
+      CONTENT_SCHEDULER_API_KEY: ${{ secrets.CONTENT_SCHEDULER_API_KEY }}
+      CONTENT_SCHEDULER_NAME: ${{ secrets.CONTENT_SCHEDULER_NAME }}
+      RUN_SMOKE_TEST: "1"
+      RUN_BACKEND_REGRESSION: "1"
+    steps:
+      - name: Checkout backend
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.inputs.ref || 'main' }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Verify deploy environment
+        run: |
+          test -n "$PROJECT_ID"
+          test -n "$REGION"
+          test -n "$SUPABASE_URL"
+          test -n "$SUPABASE_SERVICE_ROLE_KEY"
+
+      - name: Deploy backend and run regressions
+        working-directory: portal/database
+        run: bash ./cloudrun.deploy.sh

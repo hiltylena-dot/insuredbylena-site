@@ -9,6 +9,7 @@ Static website for `insuredbylena.com`.
 - `/portal/` -> internal dashboard app
 - `/.cpanel.yml` -> cPanel Git deploy tasks
 - `/.github/workflows/deploy-release.yml` -> automatic upload to Namecheap on push to `main`
+- `/.github/workflows/deploy-backend.yml` -> Cloud Run backend deploy with smoke + regression checks
 
 ## Local preview
 
@@ -43,3 +44,32 @@ To automate uploads from GitHub to Namecheap, add these repository secrets:
 
 The workflow mirrors the repo to the hosting account with `lftp` over SFTP and refreshes the portal auth file at `/portal`.
 It runs on every push to `main`, and you can still run it manually from GitHub Actions if needed.
+
+## Backend deploy automation
+
+The Cloud Run backend now has a dedicated GitHub Actions workflow that deploys the service and then runs:
+
+- [smoke_portal.py](/Users/hankybot/Documents/Playground/insuredbylena-site/portal/tests/smoke_portal.py)
+- [backend_regression.py](/Users/hankybot/Documents/Playground/insuredbylena-site/portal/tests/backend_regression.py)
+
+Add these repository secrets before using `.github/workflows/deploy-backend.yml`:
+
+- `GCP_PROJECT_ID` -> `hanky-491703`
+- `GCP_REGION` -> `us-central1`
+- `GCP_SERVICE_ACCOUNT_KEY` -> JSON key for a service account that can deploy Cloud Run
+- `SUPABASE_URL`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `GOOGLE_CALENDAR_WEB_APP_URL`
+- `GOOGLE_CALENDAR_SECRET`
+- `CONTENT_PUBLISHER_MODE`
+- `BUFFER_API_KEY`
+- `BUFFER_ORGANIZATION_ID`
+- `BUFFER_CHANNEL_ID_INSTAGRAM`
+- `BUFFER_CHANNEL_ID_FACEBOOK`
+- `BUFFER_CHANNEL_ID_TIKTOK`
+- `BUFFER_API_BASE_URL`
+- `CONTENT_SCHEDULER_WEBHOOK_URL`
+- `CONTENT_SCHEDULER_API_KEY`
+- `CONTENT_SCHEDULER_NAME`
+
+The backend workflow runs automatically on `main` when files under `portal/database/`, `portal/tests/`, or the workflow itself change, and it can also be run manually from GitHub Actions.

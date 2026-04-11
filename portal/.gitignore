@@ -21,6 +21,20 @@ credentials*.json
 data/
 database/
 exports/
+!database/
+database/.env
+!database/.env.example
+database/*.db
+database/*.bak_*.db
+database/*.cleanup_backup_*.db
+!database/*.py
+database/__pycache__/
+database/*.pyc
+!database/*.sql
+!database/*.sh
+!database/*.md
+!database/Dockerfile
+!database/.dockerignore
 
 # Local screenshots and scratch outputs
 .shots/

@@ -35,6 +35,7 @@ declare
   v_should_schedule boolean := lower(trim(coalesce(p_payload->>'shouldSchedule', 'false'))) in ('true', 't', '1', 'yes', 'on');
   v_next_appointment_raw text := nullif(trim(coalesce(p_payload->>'nextAppointmentTime', '')), '');
   v_next_appointment_time timestamptz;
+  v_has_active_schedule boolean;
   v_now timestamptz := now();
 begin
   if v_next_appointment_raw is not null then
@@ -45,6 +46,10 @@ begin
         raise exception 'Invalid nextAppointmentTime';
     end;
   end if;
+
+  v_has_active_schedule := v_should_schedule
+    and v_next_appointment_time is not null
+    and coalesce(v_disposition, '') in ('callback', 'follow_up');
 
   if v_contact_id is not null then
     select *
@@ -126,7 +131,7 @@ begin
       v_product_line,
       'call_desk_queue',
       coalesce(v_disposition, 'working'),
-      case when v_should_schedule and v_next_appointment_time is not null then 'Booked' else 'not_started' end,
+      case when v_has_active_schedule then 'Booked' else 'not_started' end,
       'review_required',
       'pending_check',
       'review_required',
@@ -144,7 +149,7 @@ begin
       v_carrier_match,
       v_confidence,
       v_pipeline_status,
-      case when v_should_schedule then v_next_appointment_time else null end,
+      case when v_has_active_schedule then v_next_appointment_time else null end,
       v_now,
       v_now
     )
@@ -162,8 +167,8 @@ begin
         product_line = coalesce(v_product_line, product_line),
         lead_status = coalesce(v_disposition, lead_status),
         booking_status = case
-          when v_should_schedule and v_next_appointment_time is not null then 'Booked'
-          else booking_status
+          when v_has_active_schedule then 'Booked'
+          else 'not_started'
         end,
         notes = coalesce(v_notes, notes),
         raw_tags = coalesce(v_tags, raw_tags),
@@ -175,15 +180,15 @@ begin
         confidence = coalesce(v_confidence, confidence),
         pipeline_status = coalesce(v_pipeline_status, pipeline_status),
         next_appointment_time = case
-          when v_should_schedule and v_next_appointment_time is not null then v_next_appointment_time
-          else next_appointment_time
+          when v_has_active_schedule then v_next_appointment_time
+          else null
         end,
         last_activity_at_source = v_now
     where lead_id = v_existing.lead_id
     returning * into v_saved;
   end if;
 
-  if v_should_schedule and v_next_appointment_time is not null then
+  if v_has_active_schedule then
     insert into public.appointment (
       lead_id,
       booking_date,
@@ -207,13 +212,20 @@ begin
           show_status = excluded.show_status,
           appointment_type = excluded.appointment_type
     returning appointment_id into v_appointment_id;
+  elsif v_saved.lead_id is not null then
+    update public.appointment
+    set booking_status = 'Canceled',
+        show_status = 'canceled'
+    where lead_id = v_saved.lead_id
+      and owner = 'call_desk'
+      and booking_status in ('Booked', 'Rescheduled', 'Pending');
   end if;
 
   return jsonb_build_object(
     'ok', true,
     'lead', to_jsonb(v_saved),
     'appointmentId', v_appointment_id,
-    'scheduledInternally', (v_should_schedule and v_next_appointment_time is not null)
+    'scheduledInternally', v_has_active_schedule
   );
 end;
 $$;
