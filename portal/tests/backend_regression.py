@@ -94,7 +94,7 @@ def _first_id(rows: object, key: str) -> int:
 
 def main() -> int:
     stamp = str(int(time.time()))
-    phone = f"555{stamp[-7:]}"
+    phone = f"556{stamp[-7:]}"
     email = f"backend-regression-{stamp}@example.com"
     contact = f"API-{stamp}"
     imported_contact = f"IMPORT-{stamp}"

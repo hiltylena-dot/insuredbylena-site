@@ -7,7 +7,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-COPY local_db_api.py clean_lead_master_data.py api_handler_*.py ./
+COPY local_db_api.py clean_lead_master_data.py api_handler_*.py api_support.py ./
 
 EXPOSE 8080
 
