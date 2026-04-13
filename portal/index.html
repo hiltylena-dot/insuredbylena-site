@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Insurance Ops Dashboard</title>
-    <link rel="stylesheet" href="./styles.css?v=20260409-34" />
+    <link rel="stylesheet" href="./styles.css?v=20260413-20" />
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
     <script>
       (() => {
@@ -17,8 +17,6 @@
           supabaseUrl: "https://ixpdvxumkloytwfezmga.supabase.co",
           supabasePublishableKey: "sb_publishable_b3eTZFC0Alt2H-49ZTIaiA__K5DidT5",
           apiBase: defaultApiBase,
-          googleCalendarWebAppUrl: "https://script.google.com/macros/s/AKfycbyAR3KESTDmaOQBNBW8uxgBJTjJmnECQ8bIrbwAFfZGAznwwoHTR8lpJJvJ6g70dZJg/exec",
-          googleCalendarSecret: "replace-this-with-a-secret-you-choose",
         };
       })();
     </script>
@@ -589,6 +587,7 @@
         <p id="authStatus" class="auth-status">Checking session…</p>
       </div>
     </div>
+    <div id="portalToastRegion" class="portal-toast-region" aria-live="polite" aria-atomic="true"></div>
     <div class="app-shell">
       <header class="top-nav">
         <div class="top-nav-left">
@@ -646,6 +645,92 @@
             <button class="operator-chip" type="button" data-preset="sourced_ready">Sourced Ready</button>
             <button class="operator-chip" type="button" data-preset="sourced_enrichment">Enrichment Needed</button>
             <button class="operator-chip clear" type="button" data-preset="clear">Clear</button>
+          </section>
+
+          <section class="panel today-mode-panel">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Today Mode</p><h3>Work the right leads next</h3></div>
+              <span id="todayModeSummary" class="table-summary">Loading queue...</span>
+            </div>
+            <div class="today-mode-stats">
+              <article class="today-mode-stat">
+                <span class="today-mode-label">Overdue</span>
+                <strong id="todayModeOverdueCount">0</strong>
+              </article>
+              <article class="today-mode-stat">
+                <span class="today-mode-label">Due today</span>
+                <strong id="todayModeDueTodayCount">0</strong>
+              </article>
+              <article class="today-mode-stat">
+                <span class="today-mode-label">Next 48 hrs</span>
+                <strong id="todayModeUpcomingCount">0</strong>
+              </article>
+              <article class="today-mode-stat">
+                <span class="today-mode-label">Call queue</span>
+                <strong id="todayModeQueueCount">0</strong>
+              </article>
+            </div>
+            <div class="detail-actions" style="margin-top: 10px;">
+              <button id="todayModeStartNextBtn" class="primary-button" type="button">Load Next Priority Lead</button>
+              <button id="todayModeOpenCalendarBtn" class="ghost-button slim" type="button">Open Calendar</button>
+            </div>
+            <div class="table-wrap" style="margin-top: 12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Priority</th>
+                    <th>Lead</th>
+                    <th>When</th>
+                    <th>Disposition</th>
+                    <th>Queue</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="todayModeTable">
+                  <tr><td colspan="6" class="muted">Today mode will populate once leads load.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section class="panel manager-briefing-panel">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Manager Briefing</p><h3>Daily operational snapshot</h3></div>
+              <span id="managerBriefingSummary" class="table-summary">Loading briefing...</span>
+            </div>
+            <div class="manager-briefing-grid">
+              <article class="manager-briefing-card">
+                <span class="manager-briefing-label">Overdue callbacks</span>
+                <strong id="managerBriefingOverdue">0</strong>
+              </article>
+              <article class="manager-briefing-card">
+                <span class="manager-briefing-label">Due today</span>
+                <strong id="managerBriefingDueToday">0</strong>
+              </article>
+              <article class="manager-briefing-card">
+                <span class="manager-briefing-label">Quoted / Sold</span>
+                <strong id="managerBriefingQuotedSold">0 / 0</strong>
+              </article>
+              <article class="manager-briefing-card">
+                <span class="manager-briefing-label">Pipeline backlog</span>
+                <strong id="managerBriefingPipeline">0</strong>
+              </article>
+            </div>
+            <div class="table-wrap" style="margin-top: 12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Priority</th>
+                    <th>Signal</th>
+                    <th>Count</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="managerBriefingTable">
+                  <tr><td colspan="4" class="muted">Briefing will populate once lead data loads.</td></tr>
+                </tbody>
+              </table>
+            </div>
           </section>
 
           <section class="panel upload-panel">
@@ -822,8 +907,116 @@
               <div><p class="panel-label">Maintenance</p><h3>UAT cleanup tools</h3></div>
               <span id="purgeStatus" class="table-summary" aria-live="polite">Ready</span>
             </div>
+            <div class="panel-header compact" style="margin-top: 12px;">
+              <div><p class="panel-label">Health Check</p><h3>Nightly-ready data quality report</h3></div>
+              <span id="healthCheckSummary" class="table-summary">Not run yet.</span>
+            </div>
+            <div class="detail-actions" style="margin-top: 8px;">
+              <button id="runHealthCheckBtn" class="ghost-button slim" type="button">Run Health Check</button>
+            </div>
+            <div id="healthCheckStatGrid" class="health-check-stat-grid" style="margin-top: 12px;">
+              <div class="health-check-stat-card">
+                <span class="health-check-stat-label">Duplicate groups</span>
+                <strong id="healthCheckDuplicateCount">-</strong>
+              </div>
+              <div class="health-check-stat-card">
+                <span class="health-check-stat-label">Stale follow-ups</span>
+                <strong id="healthCheckStaleCount">-</strong>
+              </div>
+              <div class="health-check-stat-card">
+                <span class="health-check-stat-label">Schedule mismatches</span>
+                <strong id="healthCheckScheduleCount">-</strong>
+              </div>
+              <div class="health-check-stat-card">
+                <span class="health-check-stat-label">Archived leaks</span>
+                <strong id="healthCheckArchiveCount">-</strong>
+              </div>
+              <div class="health-check-stat-card">
+                <span class="health-check-stat-label">Contact gaps</span>
+                <strong id="healthCheckContactCount">-</strong>
+              </div>
+            </div>
+            <div class="table-wrap" style="margin-top: 12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Check</th>
+                    <th>Severity</th>
+                    <th>Count</th>
+                    <th>Examples</th>
+                    <th>Recommended action</th>
+                  </tr>
+                </thead>
+                <tbody id="healthCheckTable">
+                  <tr><td colspan="5" class="muted">Run Health Check to inspect duplicate, scheduling, and archive drift.</td></tr>
+                </tbody>
+              </table>
+            </div>
             <div class="detail-actions">
               <button id="clearTestDataBtn" class="danger-button" type="button">Clear Test Data</button>
+            </div>
+            <div class="detail-actions" style="margin-top: 12px;">
+              <button id="scanDuplicateGroupsBtn" class="ghost-button slim" type="button">Scan Duplicate Groups</button>
+              <button id="clearStaleFollowUpsBtn" class="ghost-button slim" type="button">Clear Stale Follow-ups</button>
+              <span id="duplicateCleanupSummary" class="table-summary">No scan yet.</span>
+            </div>
+            <div class="table-wrap" style="margin-top: 12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Match</th>
+                    <th>Keep</th>
+                    <th>Archive Candidates</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="duplicateCleanupTable">
+                  <tr><td colspan="4" class="muted">Run a duplicate scan to review cleanup candidates.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="panel-header compact" style="margin-top: 16px;">
+              <div><p class="panel-label">Archived Leads</p><h3>Soft-archived leads you can restore</h3></div>
+              <span id="archivedLeadSummary" class="table-summary">Not loaded.</span>
+            </div>
+            <div class="detail-actions" style="margin-top: 8px;">
+              <button id="refreshArchivedLeadsBtn" class="ghost-button slim" type="button">Refresh Archived Leads</button>
+            </div>
+            <div class="table-wrap" style="margin-top: 8px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Lead</th>
+                    <th>Contact</th>
+                    <th>Archive reason</th>
+                    <th>Updated</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="archivedLeadsTable">
+                  <tr><td colspan="5" class="muted">Archived leads will appear here.</td></tr>
+                </tbody>
+              </table>
+            </div>
+            <div class="panel-header compact" style="margin-top: 16px;">
+              <div><p class="panel-label">Audit Trail</p><h3>Recent cleanup actions</h3></div>
+              <span id="cleanupAuditSummary" class="table-summary">Not loaded.</span>
+            </div>
+            <div class="table-wrap" style="margin-top: 8px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Action</th>
+                    <th>Actor</th>
+                    <th>Details</th>
+                    <th>Undo</th>
+                  </tr>
+                </thead>
+                <tbody id="cleanupAuditTable">
+                  <tr><td colspan="5" class="muted">Audit log will appear here after setup.</td></tr>
+                </tbody>
+              </table>
             </div>
           </section>
         </div>
@@ -847,7 +1040,13 @@
             <div class="calldesk-column calldesk-left">
               <article class="panel calldesk-panel client-snapshot-panel">
                 <div class="panel-header compact"><div><p class="panel-label">Step 1</p><h3>Client snapshot</h3></div></div>
-                <div class="detail-actions"><button id="deskCreateLeadBtn" class="ghost-button slim" type="button">Start new lead</button><span id="deskLeadPickerStatus" class="table-summary" aria-live="polite">Load a lead from Lead Selection.</span></div>
+                <div class="detail-actions"><button id="deskCreateLeadBtn" class="ghost-button slim" type="button">Start new lead</button><span id="deskLeadPickerStatus" class="table-summary" aria-live="polite">No lead selected yet.</span></div>
+                <div class="mobile-call-mode-bar">
+                  <button id="deskDialBtn" class="ghost-button slim" type="button">Call</button>
+                  <button id="deskTextBtn" class="ghost-button slim" type="button">Text</button>
+                  <button id="deskEmailBtn" class="ghost-button slim" type="button">Email</button>
+                  <button id="deskNextPriorityBtn" class="ghost-button slim" type="button">Next</button>
+                </div>
                 <div class="calldesk-form calldesk-form-compact">
                   <label><span>Client name</span><input id="deskClientName" type="text" /></label>
                   <label><span>Phone</span><input id="deskPhone" type="tel" inputmode="tel" /></label>
@@ -857,8 +1056,55 @@
                 </div>
               </article>
 
+              <article class="panel calldesk-panel lead-360-panel">
+                <div class="panel-header compact"><div><p class="panel-label">Lead 360</p><h3>Lead summary</h3></div><strong id="lead360Status" aria-live="polite">No lead selected</strong></div>
+                <div class="lead-360-grid">
+                  <div><p class="detail-label">Client</p><p id="lead360Client" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Contact</p><p id="lead360Contact" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Disposition</p><p id="lead360Disposition" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Next follow-up</p><p id="lead360FollowUp" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Queue</p><p id="lead360Queue" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Pipeline</p><p id="lead360Pipeline" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Carrier match</p><p id="lead360Carrier" class="detail-copy">-</p></div>
+                  <div><p class="detail-label">Last activity</p><p id="lead360Activity" class="detail-copy">-</p></div>
+                </div>
+                <div class="detail-actions">
+                  <button id="lead360LoadCalendarBtn" class="ghost-button slim" type="button">Open Calendar</button>
+                  <button id="lead360OpenPipelineBtn" class="ghost-button slim" type="button">Open Pipeline</button>
+                </div>
+              </article>
+
+              <article class="panel calldesk-panel lead-document-panel">
+                <div class="panel-header compact"><div><p class="panel-label">Client Document Hub</p><h3>Attachments and links</h3></div><strong id="leadDocumentsStatus" aria-live="polite">No lead selected</strong></div>
+                <div class="lead-document-grid">
+                  <label><span>Category</span><select id="leadDocumentCategory"><option value="general">General</option><option value="application">Application</option><option value="policy">Policy</option><option value="id">ID</option><option value="underwriting">Underwriting</option><option value="proof">Proof</option></select></label>
+                  <label class="document-upload-field"><span>Upload file</span><input id="leadDocumentFile" type="file" /></label>
+                  <label><span>Or paste link</span><input id="leadDocumentLink" type="url" placeholder="https://..." /></label>
+                  <label><span>Notes</span><input id="leadDocumentNotes" type="text" placeholder="Optional note" /></label>
+                </div>
+                <div class="detail-actions">
+                  <button id="leadDocumentUploadBtn" class="ghost-button slim" type="button">Add document</button>
+                  <button id="leadDocumentRefreshBtn" class="ghost-button slim" type="button">Refresh</button>
+                </div>
+                <div class="calldesk-divider"></div>
+                <div class="panel-header compact"><div><p class="panel-label">Checklist</p><h3>Required next</h3></div><strong id="leadDocumentChecklistStatus" aria-live="polite">No lead selected</strong></div>
+                <div id="leadDocumentChecklist" class="notes-history">
+                  <p class="muted">Load a synced lead to see required documents.</p>
+                </div>
+                <div class="calldesk-divider"></div>
+                <div class="panel-header compact"><div><p class="panel-label">Saved documents</p><h3>Available files and links</h3></div></div>
+                <div id="leadDocumentsList" class="notes-history">
+                  <p class="muted">Load a synced lead to manage client documents.</p>
+                </div>
+                <div class="calldesk-divider"></div>
+                <div class="panel-header compact"><div><p class="panel-label">Preview</p><h3>Open without leaving Call Desk</h3></div><strong id="leadDocumentPreviewStatus" aria-live="polite">No document selected</strong></div>
+                <div id="leadDocumentPreview" class="lead-document-preview">
+                  <p class="muted">Select a document to preview it here.</p>
+                </div>
+              </article>
+
               <article class="panel calldesk-panel wrapup-panel">
-                <div class="panel-header compact"><div><p class="panel-label">Step 3</p><h3>Call wrap-up and disposition</h3></div><div class="detail-actions"><button id="deskScriptDrawerToggleBtn" class="ghost-button slim" type="button">Scripts</button><div id="callDeskStatus" class="table-summary" aria-live="polite">Ready</div></div></div>
+                <div class="panel-header compact"><div><p class="panel-label">Step 3</p><h3>Wrap-up and follow-up</h3></div><div class="detail-actions"><button id="deskScriptDrawerToggleBtn" class="ghost-button slim" type="button">Scripts</button><div id="callDeskStatus" class="table-summary" aria-live="polite">Ready for update</div></div></div>
                 <div class="calldesk-form calldesk-form-compact">
                   <label><span>Need/goal summary</span><input id="deskGoalNote" type="text" /></label>
                   <label><span>Health notes</span><input id="deskHealthNotes" type="text" /></label>
@@ -883,18 +1129,33 @@
                 </div>
                 <div id="deskObjectionHighlight" class="script-highlight" hidden></div>
                 <button id="deskSaveToNotesBtn" class="save-sync-btn" type="button">Save to notes history</button>
+                <div class="detail-actions call-desk-admin-actions">
+                  <button id="deskArchiveLeadBtn" class="danger-button" type="button">Archive lead</button>
+                </div>
                 <textarea id="deskCallNotes" rows="8"></textarea>
                 <div class="detail-actions"><button id="deskCopySummaryBtn" class="ghost-button slim" type="button">Copy summary</button><button id="deskClearBtn" class="ghost-button slim" type="button">Clear</button></div>
                 <div class="calldesk-divider"></div>
-                <div class="panel-header compact"><div><p class="panel-label">Recent</p><h3>Recent call notes</h3></div><strong id="notesStatus" aria-live="polite">Saved</strong></div>
+                <div class="panel-header compact"><div><p class="panel-label">Recent</p><h3>Recent call notes</h3></div><strong id="notesStatus" aria-live="polite">Saved locally</strong></div>
                 <div id="notesHistoryList" class="notes-history"></div>
+                <div class="calldesk-divider"></div>
+                <div class="panel-header compact"><div><p class="panel-label">CRM</p><h3>Recent CRM actions</h3></div><strong id="callDeskActivityStatus" aria-live="polite">No lead selected</strong></div>
+                <div id="callDeskActivityList" class="notes-history"></div>
+                <div class="calldesk-divider"></div>
+                <div class="panel-header compact"><div><p class="panel-label">Comms Hub</p><h3>Timeline and outreach</h3></div><strong id="commsHubStatus" aria-live="polite">No lead selected</strong></div>
+                <div class="detail-actions">
+                  <button id="commsDialBtn" class="ghost-button slim" type="button">Call now</button>
+                  <button id="commsTextBtn" class="ghost-button slim" type="button">Text</button>
+                  <button id="commsEmailBtn" class="ghost-button slim" type="button">Email</button>
+                  <button id="commsCopyBtn" class="ghost-button slim" type="button">Copy contact</button>
+                </div>
+                <div id="commsTimelineList" class="notes-history"></div>
               </article>
             </div>
 
             <div class="calldesk-column calldesk-center">
               <div id="deskScriptToast" class="desk-toast" hidden></div>
               <article class="panel calldesk-panel discovery-panel">
-                <div class="panel-header compact"><div><p class="panel-label">Step 2</p><h3>Discovery</h3></div></div>
+                <div class="panel-header compact"><div><p class="panel-label">Step 2</p><h3>Discovery essentials</h3></div></div>
                 <p class="muted small dense-hide">Order: clarify problem -> confirm coverage -> branch -> recommend.</p>
                 <ul class="check-list compact-list dense-hide"><li>2A. Clarify the real problem today</li><li>2B. Confirm existing policy and replacement intent</li><li>2C. Complete health/life qualification before quote</li></ul>
                 <div class="workflow-form calldesk-workflow">
@@ -928,7 +1189,7 @@
                 </div>
               </article>
               <article id="deskCarrierActionCard" class="panel calldesk-panel" hidden>
-                <div class="panel-header compact"><div><p class="panel-label">Carrier Action</p><h3 id="deskCarrierActionName">Carrier Match</h3></div></div>
+                <div class="panel-header compact"><div><p class="panel-label">Carrier Action</p><h3 id="deskCarrierActionName">Carrier match</h3></div></div>
                 <div class="advisor-block">
                   <p class="detail-label">Writing number <span class="oc-tooltip" tabindex="0"><span class="oc-tooltip-icon" aria-hidden="true">ⓘ</span><span class="oc-tooltip-bubble" role="tooltip">Enter your specific NPN or Carrier ID to ensure you receive commission.</span></span></p>
                   <div class="detail-actions">
@@ -949,13 +1210,13 @@
 
             <aside class="calldesk-column calldesk-right">
               <article class="panel calldesk-panel calldesk-sticky calldesk-readiness-widget">
-                <div class="panel-header compact"><div><p class="panel-label">Quote Readiness</p><h3 id="deskReadinessHeading">Required before quote</h3></div></div>
+                <div class="panel-header compact"><div><p class="panel-label">Quote Readiness</p><h3 id="deskReadinessHeading">Checklist before quote</h3></div></div>
                 <p id="deskReadinessStatus" class="table-summary">Complete required answers to unlock best-fit recommendations.</p>
                 <ul id="deskReadinessList" class="check-list compact-list"></ul>
               </article>
 
               <article class="panel calldesk-panel recommendation-panel">
-                <div class="panel-header compact"><div><p class="panel-label">Recommendation</p><h3 id="deskRecommendationTitle">Quote order and lane</h3></div></div>
+                <div class="panel-header compact"><div><p class="panel-label">Recommendation</p><h3 id="deskRecommendationTitle">Best next move</h3></div></div>
                 <div class="advisor-block"><p class="detail-label">Lane</p><p id="deskWorkflowLane" class="detail-copy">Answer discovery questions.</p></div>
                 <div class="advisor-block"><p class="detail-label">Primary</p><div id="deskWorkflowPrimary" class="option-chip-list"></div></div>
                 <div class="advisor-block"><p class="detail-label">Confidence</p><p id="deskWorkflowConfidence" class="detail-copy">Low confidence until qualification is complete.</p><p class="detail-label">Fallback carrier</p><div id="deskWorkflowFallback" class="option-chip-list"></div></div>
@@ -1087,6 +1348,46 @@
 
         <div id="pipelineTabPanel" class="tab-panel" role="tabpanel" aria-labelledby="pipelineTabButton" hidden>
           <header class="hero"><div><p class="eyebrow">Carrier Pipeline</p><h2>Drag leads across the policy lifecycle</h2></div></header>
+          <section class="panel pipeline-ops-panel">
+            <div class="panel-header compact">
+              <div><p class="panel-label">Pipeline Operating System</p><h3>SLA pressure and stalled work</h3></div>
+              <span id="pipelineOpsSummary" class="table-summary">Loading pipeline ops...</span>
+            </div>
+            <div class="pipeline-ops-stats">
+              <article class="pipeline-ops-card">
+                <span class="pipeline-ops-label">Stalled leads</span>
+                <strong id="pipelineOpsStalledCount">0</strong>
+              </article>
+              <article class="pipeline-ops-card">
+                <span class="pipeline-ops-label">Underwriting aging</span>
+                <strong id="pipelineOpsUnderwritingCount">0</strong>
+              </article>
+              <article class="pipeline-ops-card">
+                <span class="pipeline-ops-label">Approved waiting</span>
+                <strong id="pipelineOpsApprovedCount">0</strong>
+              </article>
+              <article class="pipeline-ops-card">
+                <span class="pipeline-ops-label">Issued unpaid</span>
+                <strong id="pipelineOpsIssuedCount">0</strong>
+              </article>
+            </div>
+            <div class="table-wrap" style="margin-top: 12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Lead</th>
+                    <th>Stage</th>
+                    <th>Age</th>
+                    <th>Next action</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody id="pipelineOpsTable">
+                  <tr><td colspan="5" class="muted">Pipeline operating cues will appear here once leads load.</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
           <section id="pipelineBoard" class="pipeline-board">
             <article class="panel pipeline-column" data-pipeline-stage="app_submitted">
               <div class="panel-header compact"><div><p class="panel-label">Stage</p><h3>App Submitted <span class="oc-tooltip" tabindex="0"><span class="oc-tooltip-icon" aria-hidden="true">ⓘ</span><span class="oc-tooltip-bubble" role="tooltip">Application sent via carrier portal. Waiting on initial review.</span></span></h3></div><div id="pipelineCount_app_submitted" class="table-summary">0</div></div>
@@ -1149,12 +1450,12 @@
                 <p id="contentCanvaHint" class="content-field-help">Add the Canva design link here so the next editor can reopen the working file fast.</p>
               </div>
               <div class="detail-actions content-action-bar">
-                <button id="contentSaveBtn" class="ghost-button slim" type="button" onclick="window.__contentSaveDraft && window.__contentSaveDraft()">Save Draft</button>
+                <button id="contentSaveBtn" class="ghost-button slim" type="button">Save Draft</button>
                 <button id="contentSubmitReviewBtn" class="ghost-button slim" type="button">Submit Review</button>
-                <button id="contentApproveBtn" class="ghost-button slim content-action-important" type="button" onclick="window.__contentApprove && window.__contentApprove()">Approve</button>
+                <button id="contentApproveBtn" class="ghost-button slim content-action-important" type="button">Approve</button>
                 <button id="contentRequestChangesBtn" class="ghost-button slim" type="button">Request Changes</button>
-                <button id="contentScheduleBtn" class="ghost-button slim" type="button" onclick="window.__contentSchedule && window.__contentSchedule()">Schedule</button>
-                <button id="contentRunPublishTopBtn" class="ghost-button slim content-action-primary" type="button" onclick="window.__contentRunPublish && window.__contentRunPublish()">Run Publish</button>
+                <button id="contentScheduleBtn" class="ghost-button slim" type="button">Schedule</button>
+                <button id="contentRunPublishTopBtn" class="ghost-button slim content-action-primary" type="button">Run Publish</button>
               </div>
               <article class="content-required-panel" aria-label="Required before publish">
                 <div class="panel-header compact"><div><p class="panel-label">Required Before Publish</p><h3>Clear blockers for this post</h3></div></div>
@@ -1169,10 +1470,10 @@
                 <p id="contentPublishGuideSummary" class="table-summary">Select a post to see the publish sequence.</p>
                 <div id="contentPublishChecklist" class="content-publish-checklist"></div>
                 <div class="detail-actions content-publish-step-actions">
-                  <button id="contentStepSaveBtn" class="ghost-button slim" type="button" onclick="window.__contentSaveDraft && window.__contentSaveDraft()">1. Save</button>
-                  <button id="contentStepApproveBtn" class="ghost-button slim content-action-important" type="button" onclick="window.__contentApprove && window.__contentApprove()">2. Approve</button>
-                  <button id="contentStepScheduleBtn" class="ghost-button slim" type="button" onclick="window.__contentSchedule && window.__contentSchedule()">3. Schedule</button>
-                  <button id="contentStepPublishBtn" class="ghost-button slim content-action-primary" type="button" onclick="window.__contentRunPublish && window.__contentRunPublish()">4. Run Publish</button>
+                  <button id="contentStepSaveBtn" class="ghost-button slim" type="button">1. Save</button>
+                  <button id="contentStepApproveBtn" class="ghost-button slim content-action-important" type="button">2. Approve</button>
+                  <button id="contentStepScheduleBtn" class="ghost-button slim" type="button">3. Schedule</button>
+                  <button id="contentStepPublishBtn" class="ghost-button slim content-action-primary" type="button">4. Run Publish</button>
                 </div>
                 <div class="detail-actions content-canva-actions">
                   <button id="contentCopyCanvaHandoffBtn" class="ghost-button slim" type="button">Copy Canva Handoff</button>
@@ -1314,6 +1615,13 @@
                 </select>
               </label>
             </div>
+            <div id="contentFilterSummary" class="content-filter-summary" hidden>
+              <div class="content-filter-summary-copy">
+                <strong>Filters active</strong>
+                <span id="contentFilterSummaryText">Showing a filtered slice of Content Studio.</span>
+              </div>
+              <button id="contentClearFiltersBtn" class="ghost-button slim" type="button">Clear filters</button>
+            </div>
             <div class="table-wrap lead-select-table-wrap">
               <table>
                 <thead>
@@ -1365,6 +1673,6 @@
       </main>
     </div>
 
-    <script type="module" src="./app.js?v=20260409-34"></script>
+    <script type="module" src="./app.js?v=20260413-20"></script>
   </body>
 </html>

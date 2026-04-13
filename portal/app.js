@@ -21,6 +21,7 @@ const PORTAL_CONFIG = window.PORTAL_CONFIG || {};
 const SUPABASE_URL = String(PORTAL_CONFIG.supabaseUrl || "").trim();
 const SUPABASE_PUBLISHABLE_KEY = String(PORTAL_CONFIG.supabasePublishableKey || "").trim();
 const API_ORIGIN = String(PORTAL_CONFIG.apiBase || "").trim();
+const GOOGLE_CALENDAR_SYNC_ENABLED = Boolean(API_ORIGIN);
 const ENABLE_CONTENT_API = Boolean(PORTAL_CONFIG.enableContentApi && API_ORIGIN);
 const supabase =
   SUPABASE_URL && SUPABASE_PUBLISHABLE_KEY
@@ -32,6 +33,7 @@ const supabase =
       })
     : null;
 let hasInitialized = false;
+let portalToastCounter = 0;
 
 const state = {
   leads: [],
@@ -45,6 +47,11 @@ const state = {
   contentRevisions: [],
   carrierDocs: [],
   carrierGrid: [],
+  cleanupAuditLogs: [],
+  archivedLeads: [],
+  healthCheckReport: null,
+  callDeskActivityEntries: [],
+  leadDocuments: [],
   todayAppointments: [],
   calendarTodayEvents: [],
   calendarWeekEvents: [],
@@ -63,6 +70,7 @@ const state = {
     contentPostWeekFilter: "",
     contentPostPlatformFilter: "",
     contentPostStatusFilter: "",
+    contentFiltersTouched: false,
     campaignSelectedLeadIds: [],
     selectedCallDeskLeadId: "",
     currentCallLeadId: "",
@@ -75,6 +83,8 @@ const state = {
     primaryLane: "Needs more qualification",
     primaryWhyLane: "",
     carrierConfigs: [],
+    maintenanceDuplicateClusters: [],
+    selectedLeadDocumentId: "",
     isSaving: false,
     saveStatus: "idle",
     uploadedLeadRows: [],
@@ -191,6 +201,7 @@ const LEAD_SELECTION_MAX_ROWS = 250;
 const LOCAL_DB_SYNC_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/sync` : "";
 const LOCAL_DB_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads/import` : "";
 const LOCAL_DB_LEAD_BASE_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads` : "";
+const LOCAL_DB_LEAD_DOCUMENT_ARCHIVE_URL = API_ORIGIN ? `${API_ORIGIN}/api/lead-documents` : "";
 const LEAD_OPEN_LEASE_URL = API_ORIGIN ? `${API_ORIGIN}/api/leads` : "";
 const LOCAL_DB_CARRIER_CONFIG_URL = API_ORIGIN ? `${API_ORIGIN}/api/carrier-config` : "";
 const LOCAL_DB_CALENDAR_SCHEDULE_URL = API_ORIGIN ? `${API_ORIGIN}/api/calendar/schedule` : "";
@@ -543,6 +554,21 @@ async function markLeadOpenedInSupabase(leadId) {
   return openedAt;
 }
 
+async function updateLeadCalendarEventIdInSupabase(leadExternalId, calendarEventId) {
+  if (!supabase) throw new Error("Supabase lead store is not configured.");
+  const normalizedLeadId = String(leadExternalId || "").trim();
+  const normalizedEventId = String(calendarEventId || "").trim();
+  if (!normalizedLeadId || !normalizedEventId) return;
+  const { error } = await supabase
+    .from("lead_master")
+    .update({
+      calendar_event_id: normalizedEventId,
+      last_activity_at_source: nowIso(),
+    })
+    .eq("lead_external_id", normalizedLeadId);
+  if (error) throw error;
+}
+
 function getLeadByExternalId(leadExternalId) {
   const normalized = String(leadExternalId || "").trim();
   if (!normalized) return null;
@@ -618,6 +644,186 @@ function buildCalendarEventFromLead(lead = {}) {
   };
 }
 
+function getCalendarLeadDedupeKey(lead = {}) {
+  const normalizedPhone = digitsOnly(lead?.mobile_phone || "");
+  if (normalizedPhone) return `phone:${normalizedPhone}`;
+  const normalizedEmail = String(lead?.email || "").trim().toLowerCase();
+  if (normalizedEmail) return `email:${normalizedEmail}`;
+  const internalLeadId = Number(lead?.lead_id || 0);
+  if (internalLeadId > 0) return `lead:${internalLeadId}`;
+  const leadId = String(lead?.lead_external_id || "").trim();
+  return leadId ? `external:${leadId}` : "";
+}
+
+function scoreLeadForDuplicateKeeper(lead = {}) {
+  const lastActivity = Date.parse(
+    String(lead?.last_activity_at_source || lead?.inserted_at || lead?.created_at_source || ""),
+  ) || 0;
+  return (
+    (isOperationallyArchivedLead(lead) ? 0 : 1000000000000000)
+    + (String(lead?.next_appointment_time || "").trim() ? 1000000000000 : 0)
+    + (String(lead?.email || "").trim() ? 1000000000 : 0)
+    + (digitsOnly(lead?.mobile_phone || "") ? 1000000 : 0)
+    + lastActivity
+  );
+}
+
+function buildDuplicateLeadClusters(leads = []) {
+  const rows = (Array.isArray(leads) ? leads : []).filter((lead) => isSyncedLeadRecord(lead));
+  const phoneBuckets = new Map();
+  const emailBuckets = new Map();
+  rows.forEach((lead, index) => {
+    const phone = digitsOnly(lead?.mobile_phone || "");
+    const email = String(lead?.email || "").trim().toLowerCase();
+    if (phone) {
+      if (!phoneBuckets.has(phone)) phoneBuckets.set(phone, []);
+      phoneBuckets.get(phone).push(index);
+    }
+    if (email) {
+      if (!emailBuckets.has(email)) emailBuckets.set(email, []);
+      emailBuckets.get(email).push(index);
+    }
+  });
+
+  const adjacency = rows.map(() => new Set());
+  const connectBucket = (bucket) => {
+    if (!Array.isArray(bucket) || bucket.length < 2) return;
+    const [root, ...rest] = bucket;
+    rest.forEach((idx) => {
+      adjacency[root].add(idx);
+      adjacency[idx].add(root);
+    });
+  };
+  phoneBuckets.forEach(connectBucket);
+  emailBuckets.forEach(connectBucket);
+
+  const visited = new Set();
+  const clusters = [];
+  for (let i = 0; i < rows.length; i += 1) {
+    if (visited.has(i) || !adjacency[i].size) continue;
+    const stack = [i];
+    const component = [];
+    while (stack.length) {
+      const current = stack.pop();
+      if (visited.has(current)) continue;
+      visited.add(current);
+      component.push(current);
+      adjacency[current].forEach((neighbor) => {
+        if (!visited.has(neighbor)) stack.push(neighbor);
+      });
+    }
+    if (component.length < 2) continue;
+    const clusterLeads = component
+      .map((index) => rows[index])
+      .sort((a, b) => scoreLeadForDuplicateKeeper(b) - scoreLeadForDuplicateKeeper(a));
+    const phoneMatches = Array.from(
+      new Set(clusterLeads.map((lead) => digitsOnly(lead?.mobile_phone || "")).filter(Boolean)),
+    );
+    const emailMatches = Array.from(
+      new Set(clusterLeads.map((lead) => String(lead?.email || "").trim().toLowerCase()).filter(Boolean)),
+    );
+    clusters.push({
+      id: clusterLeads.map((lead) => Number(lead?.lead_id || 0)).filter((id) => id > 0).join("-"),
+      leads: clusterLeads,
+      keeper: clusterLeads[0] || null,
+      archiveCandidates: clusterLeads.slice(1).filter((lead) => !isOperationallyArchivedLead(lead)),
+      matchLabel: [
+        phoneMatches.length ? `Phone ${phoneMatches.join(", ")}` : "",
+        emailMatches.length ? `Email ${emailMatches.join(", ")}` : "",
+      ].filter(Boolean).join(" • "),
+    });
+  }
+
+  return clusters.sort((a, b) => {
+    if (b.archiveCandidates.length !== a.archiveCandidates.length) {
+      return b.archiveCandidates.length - a.archiveCandidates.length;
+    }
+    return scoreLeadForDuplicateKeeper(b.keeper || {}) - scoreLeadForDuplicateKeeper(a.keeper || {});
+  });
+}
+
+function buildStaleFollowUpLeads(leads = []) {
+  return (Array.isArray(leads) ? leads : []).filter((lead) => {
+    if (!isSyncedLeadRecord(lead)) return false;
+    if (isOperationallyArchivedLead(lead)) return false;
+    const nextAt = String(lead?.next_appointment_time || "").trim();
+    const disposition = String(lead?.disposition || lead?.lead_status || "").trim().toLowerCase();
+    return Boolean(nextAt) && !["callback", "follow_up"].includes(disposition);
+  });
+}
+
+function mergePipeSegments(...values) {
+  const seen = new Set();
+  const merged = [];
+  values.forEach((value) => {
+    String(value || "")
+      .split("|")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => {
+        const key = part.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        merged.push(part);
+      });
+  });
+  return merged.join(" | ");
+}
+
+function mergeTagSegments(...values) {
+  const seen = new Set();
+  const merged = [];
+  values.forEach((value) => {
+    String(value || "")
+      .split(",")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => {
+        const key = part.toLowerCase();
+        if (seen.has(key)) return;
+        seen.add(key);
+        merged.push(part);
+      });
+  });
+  return merged.join(", ");
+}
+
+function buildKeeperMergePatch(keeper = {}, archiveCandidates = []) {
+  const candidates = Array.isArray(archiveCandidates) ? archiveCandidates : [];
+  const mergedNotes = mergePipeSegments(
+    keeper.notes,
+    ...candidates.map((lead) => lead?.notes),
+    candidates.length
+      ? `Merged duplicate leads: ${candidates
+          .map((lead) => String(lead?.full_name || lead?.lead_external_id || "").trim())
+          .filter(Boolean)
+          .join(", ")}`
+      : "",
+  );
+  const mergedTags = mergeTagSegments(
+    keeper.raw_tags,
+    ...candidates.map((lead) => lead?.raw_tags),
+    "duplicate_merged",
+  );
+  const fallbackEmail = String(keeper.email || "").trim()
+    || candidates.map((lead) => String(lead?.email || "").trim()).find(Boolean)
+    || null;
+  const fallbackPhone = String(keeper.mobile_phone || "").trim()
+    || candidates.map((lead) => String(lead?.mobile_phone || "").trim()).find(Boolean)
+    || null;
+  const latestActivity = [keeper, ...candidates]
+    .map((lead) => Date.parse(String(lead?.last_activity_at_source || lead?.inserted_at || "")) || 0)
+    .reduce((max, value) => (value > max ? value : max), 0);
+  return {
+    notes: mergedNotes || null,
+    raw_tags: mergedTags || null,
+    email: fallbackEmail,
+    mobile_phone: fallbackPhone,
+    last_activity_at_source: latestActivity ? new Date(latestActivity).toISOString() : nowIso(),
+    suppress_reason: null,
+  };
+}
+
 function dedupeCalendarEvents(items = []) {
   const seen = new Map();
   for (const item of Array.isArray(items) ? items : []) {
@@ -662,6 +868,14 @@ function upsertLocalCalendarEvent(event) {
   if (Number.isFinite(startTs) && startTs >= todayStart && startTs <= weekEnd) {
     state.calendarWeekEvents = upsertInto(state.calendarWeekEvents);
   }
+}
+
+function removeLocalCalendarEventsForLead(leadExternalId) {
+  const normalized = String(leadExternalId || "").trim();
+  if (!normalized) return;
+  const keep = (row) => String(row?.lead_external_id || "").trim() !== normalized;
+  state.calendarTodayEvents = (Array.isArray(state.calendarTodayEvents) ? state.calendarTodayEvents : []).filter(keep);
+  state.calendarWeekEvents = (Array.isArray(state.calendarWeekEvents) ? state.calendarWeekEvents : []).filter(keep);
 }
 
 async function loadAppointmentsFromSupabase({ start, end, limit = 200 } = {}) {
@@ -914,6 +1128,39 @@ function setGoogleCalendarEmbeds() {
   }
 }
 
+async function createGoogleCalendarEvent({
+  clientName,
+  email,
+  phone,
+  scheduledAt,
+  description,
+  durationMinutes = 30,
+  existingEventId = "",
+}) {
+  const proxyUrl = API_ORIGIN ? `${API_ORIGIN}/api/google-calendar/sync` : "";
+  if (!proxyUrl) {
+    throw new Error("Google Calendar sync endpoint is not configured.");
+  }
+  const response = await fetch(proxyUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      clientName: String(clientName || "").trim(),
+      email: String(email || "").trim(),
+      phone: String(phone || "").trim(),
+      scheduledAt: String(scheduledAt || "").trim(),
+      description: String(description || "").trim(),
+      durationMinutes: Number(durationMinutes || 30) || 30,
+      existingEventId: String(existingEventId || "").trim(),
+    }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) {
+    throw new Error(String(data?.error || `Google Calendar sync failed (${response.status})`));
+  }
+  return data;
+}
+
 function isContentApiAvailable() {
   return Boolean(supabase && hasPortalContentAccess());
 }
@@ -938,6 +1185,55 @@ function showDeskScriptToast(scriptText) {
     toastEl.hidden = true;
     deskScriptToastTimer = 0;
   }, 10000);
+}
+
+function showPortalToast(message, tone = "info", options = {}) {
+  const copy = String(message || "").trim();
+  const region = document.getElementById("portalToastRegion");
+  if (!copy || !region) return;
+  const titleMap = {
+    success: "Saved",
+    warning: "Needs Attention",
+    error: "Action Failed",
+    info: "Update",
+  };
+  const variant = ["success", "warning", "error", "info"].includes(String(tone || ""))
+    ? String(tone)
+    : "info";
+  const duration = Math.max(Number(options.duration || 3200) || 3200, 1200);
+  const toast = document.createElement("div");
+  toast.className = `portal-toast portal-toast--${variant}`;
+  toast.dataset.toastId = `${Date.now()}-${portalToastCounter += 1}`;
+  const title = options.title || titleMap[variant] || "Update";
+  toast.innerHTML = `
+    <div class="portal-toast-title">${escapeHtml(title)}</div>
+    <div class="portal-toast-copy">${escapeHtml(copy)}</div>
+  `;
+  region.prepend(toast);
+  window.setTimeout(() => {
+    toast.remove();
+  }, duration);
+}
+
+function getPortalActorEmail() {
+  return (
+    String(state.auth?.profile?.email || "").trim()
+    || String(document.getElementById("portalUserEmail")?.textContent || "").trim()
+    || ""
+  );
+}
+
+function getCurrentSelectedLead() {
+  const leadId = String(state.ui.selectedCallDeskLeadId || state.ui.leadId || "").trim();
+  if (!leadId) return null;
+  return state.leads.find((row) => String(row?.lead_external_id || "").trim() === leadId) || null;
+}
+
+function updateCallDeskArchiveButton() {
+  const button = document.getElementById("deskArchiveLeadBtn");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const lead = getCurrentSelectedLead();
+  button.disabled = !lead || Number(lead?.lead_id || 0) <= 0 || !supabase || !canPublishContent();
 }
 
 function setPrimaryCarrier(value) {
@@ -1069,18 +1365,41 @@ function getLeadExternalId(lead = {}) {
   return String(lead?.lead_external_id || "").trim();
 }
 
-function pruneCreatedLeadsAgainstSyncedLeads(createdLeads = [], syncedLeads = []) {
-  const syncedIds = new Set(
-    (Array.isArray(syncedLeads) ? syncedLeads : [])
-      .map((lead) => getLeadExternalId(lead))
-      .filter(Boolean),
+function isOperationallyArchivedLead(lead = {}) {
+  const suppressReason = String(lead?.suppress_reason || "").trim().toLowerCase();
+  const leadStatus = String(lead?.lead_status || "").trim().toLowerCase();
+  const disposition = String(lead?.disposition || "").trim().toLowerCase();
+  return (
+    suppressReason === "duplicate_archived"
+    || suppressReason.includes("duplicate archived")
+    || leadStatus === "archived"
+    || disposition === "archived"
   );
+}
+
+function pruneCreatedLeadsAgainstSyncedLeads(createdLeads = [], syncedLeads = []) {
+  const syncedIds = new Set();
+  const syncedPhones = new Set();
+  const syncedEmails = new Set();
+  (Array.isArray(syncedLeads) ? syncedLeads : []).forEach((lead) => {
+    const externalId = getLeadExternalId(lead);
+    if (externalId) syncedIds.add(externalId);
+    const phone = digitsOnly(lead?.mobile_phone || "");
+    const email = String(lead?.email || "").trim().toLowerCase();
+    if (phone) syncedPhones.add(phone);
+    if (email) syncedEmails.add(email);
+  });
 
   return (Array.isArray(createdLeads) ? createdLeads : []).filter((lead) => {
     const externalId = getLeadExternalId(lead);
     if (!externalId) return false;
     if (isSyncedLeadRecord(lead)) return false;
-    return !syncedIds.has(externalId);
+    if (syncedIds.has(externalId)) return false;
+    const phone = digitsOnly(lead?.mobile_phone || "");
+    const email = String(lead?.email || "").trim().toLowerCase();
+    if (phone && syncedPhones.has(phone)) return false;
+    if (email && syncedEmails.has(email)) return false;
+    return true;
   });
 }
 
@@ -1102,11 +1421,21 @@ function mergeLeadsWithDrafts(baseLeads = [], draftLeads = []) {
 function upsertLeadIntoState(lead = {}) {
   const externalId = getLeadExternalId(lead);
   if (!externalId) return;
+  const normalizedPhone = digitsOnly(lead?.mobile_phone || "");
+  const normalizedEmail = String(lead?.email || "").trim().toLowerCase();
   const current = Array.isArray(state.leads) ? [...state.leads] : [];
   const existingIndex = current.findIndex((row) => getLeadExternalId(row) === externalId);
   if (existingIndex >= 0) current[existingIndex] = { ...current[existingIndex], ...lead };
   else current.unshift(lead);
-  state.leads = current;
+  state.leads = current.filter((row) => {
+    if (getLeadExternalId(row) === externalId) return true;
+    if (isSyncedLeadRecord(row)) return true;
+    const rowPhone = digitsOnly(row?.mobile_phone || "");
+    const rowEmail = String(row?.email || "").trim().toLowerCase();
+    if (normalizedPhone && rowPhone === normalizedPhone) return false;
+    if (normalizedEmail && rowEmail === normalizedEmail) return false;
+    return true;
+  });
 }
 
 function removeCreatedLeadByExternalId(leadExternalId) {
@@ -1115,6 +1444,25 @@ function removeCreatedLeadByExternalId(leadExternalId) {
   const next = (Array.isArray(state.createdLeads) ? state.createdLeads : []).filter(
     (row) => getLeadExternalId(row) !== normalized,
   );
+  if (next.length !== state.createdLeads.length) {
+    state.createdLeads = next;
+    saveCreatedLeads();
+  }
+}
+
+function removeCreatedLeadDraftsForMatch({ leadExternalId = "", phone = "", email = "" } = {}) {
+  const normalizedLeadId = String(leadExternalId || "").trim();
+  const normalizedPhone = digitsOnly(phone);
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  const next = (Array.isArray(state.createdLeads) ? state.createdLeads : []).filter((row) => {
+    const rowLeadId = getLeadExternalId(row);
+    const rowPhone = digitsOnly(row?.mobile_phone || "");
+    const rowEmail = String(row?.email || "").trim().toLowerCase();
+    if (normalizedLeadId && rowLeadId === normalizedLeadId) return false;
+    if (normalizedPhone && rowPhone && rowPhone === normalizedPhone) return false;
+    if (normalizedEmail && rowEmail && rowEmail === normalizedEmail) return false;
+    return true;
+  });
   if (next.length !== state.createdLeads.length) {
     state.createdLeads = next;
     saveCreatedLeads();
@@ -2384,6 +2732,214 @@ function classifyFollowUpStatus(value) {
   return "Upcoming";
 }
 
+function isSameLocalDay(dateA, dateB) {
+  return (
+    dateA.getFullYear() === dateB.getFullYear()
+    && dateA.getMonth() === dateB.getMonth()
+    && dateA.getDate() === dateB.getDate()
+  );
+}
+
+function getTodayModePriorityTone(priorityKey) {
+  if (priorityKey === "overdue") return "critical";
+  if (priorityKey === "today") return "warning";
+  return "good";
+}
+
+function buildTodayModeRows(leads = []) {
+  const now = new Date();
+  const in48Hours = now.getTime() + 48 * 60 * 60 * 1000;
+  const rows = [];
+  const seen = new Set();
+
+  for (const lead of Array.isArray(leads) ? leads : []) {
+    if (!isSyncedLeadRecord(lead)) continue;
+    if (isOperationallyArchivedLead(lead)) continue;
+    const leadId = String(lead?.lead_external_id || "").trim();
+    if (!leadId || seen.has(leadId)) continue;
+
+    const rawDisposition = String(lead?.disposition || lead?.lead_status || "").trim().toLowerCase();
+    const nextAtRaw = String(lead?.next_appointment_time || "").trim();
+    const nextAt = nextAtRaw ? new Date(nextAtRaw) : null;
+    const hasValidAppointment = nextAt instanceof Date && !Number.isNaN(nextAt.getTime());
+    const inCallQueue = shouldIncludeInMainQueue(lead);
+
+    let priorityKey = "";
+    let priorityLabel = "";
+    if (hasValidAppointment && nextAt.getTime() < now.getTime()) {
+      priorityKey = "overdue";
+      priorityLabel = "Overdue";
+    } else if (hasValidAppointment && isSameLocalDay(nextAt, now)) {
+      priorityKey = "today";
+      priorityLabel = "Due today";
+    } else if (hasValidAppointment && nextAt.getTime() <= in48Hours) {
+      priorityKey = "upcoming";
+      priorityLabel = "Next 48h";
+    } else if (inCallQueue) {
+      priorityKey = "queue";
+      priorityLabel = "Call queue";
+    } else {
+      continue;
+    }
+
+    seen.add(leadId);
+    rows.push({
+      lead,
+      leadId,
+      when: hasValidAppointment ? nextAt : null,
+      priorityKey,
+      priorityLabel,
+      disposition: rawDisposition || "working",
+      queue: String(lead?.owner_queue || lead?.routing_bucket || "").trim() || "unassigned",
+      sortWeight:
+        priorityKey === "overdue" ? 0
+          : priorityKey === "today" ? 1
+            : priorityKey === "upcoming" ? 2
+              : 3,
+    });
+  }
+
+  return rows.sort((a, b) => {
+    if (a.sortWeight !== b.sortWeight) return a.sortWeight - b.sortWeight;
+    const aTime = a.when ? a.when.getTime() : Number.MAX_SAFE_INTEGER;
+    const bTime = b.when ? b.when.getTime() : Number.MAX_SAFE_INTEGER;
+    if (aTime !== bTime) return aTime - bTime;
+    const aPriority = String(a.lead?.priority_tier || "").toLowerCase() === "high" ? 0 : 1;
+    const bPriority = String(b.lead?.priority_tier || "").toLowerCase() === "high" ? 0 : 1;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    return getLeadDisplayName(a.lead).localeCompare(getLeadDisplayName(b.lead));
+  });
+}
+
+function renderTodayMode() {
+  const summaryEl = document.getElementById("todayModeSummary");
+  const table = document.getElementById("todayModeTable");
+  const overdueCountEl = document.getElementById("todayModeOverdueCount");
+  const todayCountEl = document.getElementById("todayModeDueTodayCount");
+  const upcomingCountEl = document.getElementById("todayModeUpcomingCount");
+  const queueCountEl = document.getElementById("todayModeQueueCount");
+  const nextBtn = document.getElementById("todayModeStartNextBtn");
+  if (!summaryEl || !table || !nextBtn) return;
+
+  const rows = buildTodayModeRows(state.leads);
+  const overdueCount = rows.filter((row) => row.priorityKey === "overdue").length;
+  const dueTodayCount = rows.filter((row) => row.priorityKey === "today").length;
+  const upcomingCount = rows.filter((row) => row.priorityKey === "upcoming").length;
+  const queueCount = rows.filter((row) => row.priorityKey === "queue").length;
+
+  if (overdueCountEl) overdueCountEl.textContent = String(overdueCount);
+  if (todayCountEl) todayCountEl.textContent = String(dueTodayCount);
+  if (upcomingCountEl) upcomingCountEl.textContent = String(upcomingCount);
+  if (queueCountEl) queueCountEl.textContent = String(queueCount);
+
+  summaryEl.textContent = rows.length
+    ? `${overdueCount} overdue • ${dueTodayCount} due today • ${rows.length} in today mode`
+    : "No urgent leads right now.";
+  nextBtn.disabled = !rows.length;
+
+  if (!rows.length) {
+    table.innerHTML = `<tr><td colspan="6" class="muted">No overdue callbacks, due-today follow-ups, or active call-queue leads right now.</td></tr>`;
+    return;
+  }
+
+  table.innerHTML = rows.slice(0, 20).map((row) => {
+    const lead = row.lead || {};
+    const whenText = row.when ? formatDateTimeShort(row.when.toISOString()) : "Ready now";
+    const dispositionLabel = String(row.disposition || "working").replaceAll("_", " ");
+    const queueLabel = toFriendlyQueueLabel(row.queue);
+    return `<tr>
+      <td><span class="today-mode-priority" data-tone="${escapeHtml(getTodayModePriorityTone(row.priorityKey))}">${escapeHtml(row.priorityLabel)}</span></td>
+      <td>${escapeHtml(summarizeLeadForHealthCheck(lead))}</td>
+      <td>${escapeHtml(whenText)}</td>
+      <td>${escapeHtml(dispositionLabel)}</td>
+      <td>${escapeHtml(queueLabel)}</td>
+      <td><button class="ghost-button slim" type="button" data-today-mode-load="${escapeHtml(row.leadId)}">Load Lead</button></td>
+    </tr>`;
+  }).join("");
+}
+
+function openTodayModeLead(leadId) {
+  const normalizedLeadId = String(leadId || "").trim();
+  if (!normalizedLeadId) return;
+  loadLeadIntoCallDesk(normalizedLeadId);
+  setActiveTab("calldesk");
+}
+
+function startNextPriorityLead() {
+  const rows = buildTodayModeRows(state.leads);
+  const nextLeadId = rows[0]?.leadId || "";
+  if (!nextLeadId) {
+    const statusEl = document.getElementById("todayModeSummary");
+    if (statusEl) statusEl.textContent = "No urgent leads right now.";
+    return;
+  }
+  openTodayModeLead(nextLeadId);
+}
+
+function renderManagerBriefing() {
+  const summaryEl = document.getElementById("managerBriefingSummary");
+  const overdueEl = document.getElementById("managerBriefingOverdue");
+  const dueTodayEl = document.getElementById("managerBriefingDueToday");
+  const quotedSoldEl = document.getElementById("managerBriefingQuotedSold");
+  const pipelineEl = document.getElementById("managerBriefingPipeline");
+  const table = document.getElementById("managerBriefingTable");
+  if (!summaryEl || !table) return;
+
+  const todayRows = buildTodayModeRows(state.leads);
+  const overdueCount = todayRows.filter((row) => row.priorityKey === "overdue").length;
+  const dueTodayCount = todayRows.filter((row) => row.priorityKey === "today").length;
+  const quotedCount = state.leads.filter((row) => String(row?.disposition || row?.lead_status || "").trim().toLowerCase() === "quoted").length;
+  const soldCount = state.leads.filter((row) => String(row?.disposition || row?.lead_status || "").trim().toLowerCase() === "sold").length;
+  const pipelineBacklog = state.leads.filter((row) => PIPELINE_STAGES.includes(String(row?.pipeline_status || "").trim())).length;
+
+  if (overdueEl) overdueEl.textContent = String(overdueCount);
+  if (dueTodayEl) dueTodayEl.textContent = String(dueTodayCount);
+  if (quotedSoldEl) quotedSoldEl.textContent = `${quotedCount} / ${soldCount}`;
+  if (pipelineEl) pipelineEl.textContent = String(pipelineBacklog);
+
+  summaryEl.textContent = `${overdueCount} overdue • ${dueTodayCount} due today • ${pipelineBacklog} in pipeline`;
+
+  const rows = [
+    {
+      priority: overdueCount ? "Critical" : "Healthy",
+      signal: "Overdue callbacks and follow-ups",
+      count: overdueCount,
+      action: "today",
+      actionLabel: "Work Today Mode",
+    },
+    {
+      priority: dueTodayCount ? "Watch" : "Healthy",
+      signal: "Due today follow-ups",
+      count: dueTodayCount,
+      action: "calendar",
+      actionLabel: "Open Calendar",
+    },
+    {
+      priority: pipelineBacklog >= 8 ? "Watch" : "Healthy",
+      signal: "Pipeline backlog across active stages",
+      count: pipelineBacklog,
+      action: "pipeline",
+      actionLabel: "Open Pipeline",
+    },
+    {
+      priority: quotedCount > soldCount ? "Opportunity" : "Healthy",
+      signal: "Quoted leads waiting to close",
+      count: Math.max(quotedCount - soldCount, 0),
+      action: "campaign",
+      actionLabel: "Open Campaign",
+    },
+  ];
+
+  table.innerHTML = rows.map((row) => `
+    <tr>
+      <td>${escapeHtml(String(row.priority))}</td>
+      <td>${escapeHtml(String(row.signal))}</td>
+      <td>${escapeHtml(String(row.count))}</td>
+      <td><button class="ghost-button slim" type="button" data-briefing-action="${escapeHtml(String(row.action || ""))}">${escapeHtml(String(row.actionLabel || "Open"))}</button></td>
+    </tr>
+  `).join("");
+}
+
 function renderCalendarLeadQueue() {
   const table = document.getElementById("calendarLeadQueueTable");
   const countEl = document.getElementById("calendarLeadQueueCount");
@@ -2391,11 +2947,11 @@ function renderCalendarLeadQueue() {
   const byLeadId = new Map();
   for (const lead of state.leads) {
     if (!isSyncedLeadRecord(lead)) continue;
-    const internalLeadId = Number(lead?.lead_id || 0);
-    const leadId = String(lead?.lead_external_id || "").trim();
     const nextAt = String(lead?.next_appointment_time || "").trim();
+    const disposition = String(lead?.disposition || lead?.lead_status || "").trim().toLowerCase();
     if (!nextAt) continue;
-    const dedupeKey = internalLeadId > 0 ? `lead:${internalLeadId}` : leadId;
+    if (!["callback", "follow_up"].includes(disposition)) continue;
+    const dedupeKey = getCalendarLeadDedupeKey(lead);
     if (!dedupeKey) continue;
     const existing = byLeadId.get(dedupeKey);
     const leadTs = Date.parse(nextAt) || Number.MAX_SAFE_INTEGER;
@@ -2439,6 +2995,358 @@ function renderCalendarTab() {
   renderCalendarLeadQueue();
 }
 
+function healthCheckSeverityTone(severity) {
+  const normalized = String(severity || "").trim().toLowerCase();
+  if (normalized === "critical") return "critical";
+  if (normalized === "warning") return "warning";
+  return "good";
+}
+
+function buildHealthCheckExamples(items = [], formatter = (item) => String(item || "")) {
+  return (Array.isArray(items) ? items : [])
+    .slice(0, 3)
+    .map((item) => formatter(item))
+    .filter(Boolean);
+}
+
+function summarizeLeadForHealthCheck(lead = {}) {
+  const name = getLeadDisplayName(lead);
+  const contact = String(lead?.mobile_phone || lead?.email || "-").trim();
+  return contact && contact !== "-" ? `${name} (${contact})` : name;
+}
+
+function buildMaintenanceHealthCheckReport(leads = [], appointmentRows = []) {
+  const syncedLeads = (Array.isArray(leads) ? leads : []).filter((lead) => isSyncedLeadRecord(lead));
+  const activeLeads = syncedLeads.filter((lead) => !isOperationallyArchivedLead(lead));
+  const duplicateGroups = buildDuplicateLeadClusters(syncedLeads).filter(
+    (cluster) => Array.isArray(cluster?.archiveCandidates) && cluster.archiveCandidates.length,
+  );
+  const staleFollowUps = buildStaleFollowUpLeads(syncedLeads);
+
+  const activeAppointments = (Array.isArray(appointmentRows) ? appointmentRows : []).filter((row) => {
+    const owner = String(row?.owner || "").trim().toLowerCase();
+    const bookingStatus = String(row?.booking_status || "").trim();
+    return owner === "call_desk" && ["Booked", "Rescheduled", "Pending"].includes(bookingStatus);
+  });
+
+  const appointmentsByLeadId = new Map();
+  activeAppointments.forEach((row) => {
+    const leadId = Number(row?.lead_id || 0);
+    if (leadId <= 0) return;
+    if (!appointmentsByLeadId.has(leadId)) appointmentsByLeadId.set(leadId, []);
+    appointmentsByLeadId.get(leadId).push(row);
+  });
+
+  const multiActiveAppointments = Array.from(appointmentsByLeadId.entries())
+    .filter(([, rows]) => rows.length > 1)
+    .map(([leadId, rows]) => {
+      const lead = syncedLeads.find((entry) => Number(entry?.lead_id || 0) === Number(leadId)) || {};
+      return { lead, rows };
+    });
+
+  const scheduledWithoutAppointment = activeLeads.filter((lead) => {
+    const nextAt = String(lead?.next_appointment_time || "").trim();
+    const disposition = String(lead?.disposition || lead?.lead_status || "").trim().toLowerCase();
+    if (!nextAt || !["callback", "follow_up"].includes(disposition)) return false;
+    return !appointmentsByLeadId.has(Number(lead?.lead_id || 0));
+  });
+
+  const archivedLeadLeaks = syncedLeads.filter((lead) => {
+    if (!isOperationallyArchivedLead(lead)) return false;
+    const ownerQueue = String(lead?.owner_queue || "").trim().toLowerCase();
+    const bookingStatus = String(lead?.booking_status || "").trim().toLowerCase();
+    const suppressReason = String(lead?.suppress_reason || "").trim().toLowerCase();
+    return (
+      Boolean(String(lead?.next_appointment_time || "").trim())
+      || Boolean(String(lead?.calendar_event_id || "").trim())
+      || ownerQueue !== "archive"
+      || !suppressReason
+      || ["booked", "rescheduled", "pending"].includes(bookingStatus)
+    );
+  });
+
+  const queueContactGaps = activeLeads.filter((lead) => {
+    const ownerQueue = String(lead?.owner_queue || "").trim().toLowerCase();
+    if (ownerQueue !== "call_desk_queue") return false;
+    return !digitsOnly(lead?.mobile_phone || "") && !String(lead?.email || "").trim();
+  });
+
+  const syncedIds = new Set();
+  const syncedPhones = new Set();
+  const syncedEmails = new Set();
+  syncedLeads.forEach((lead) => {
+    const externalId = getLeadExternalId(lead);
+    const phone = digitsOnly(lead?.mobile_phone || "");
+    const email = String(lead?.email || "").trim().toLowerCase();
+    if (externalId) syncedIds.add(externalId);
+    if (phone) syncedPhones.add(phone);
+    if (email) syncedEmails.add(email);
+  });
+  const localDraftConflicts = (Array.isArray(state.createdLeads) ? state.createdLeads : []).filter((lead) => {
+    if (isSyncedLeadRecord(lead)) return false;
+    const externalId = getLeadExternalId(lead);
+    const phone = digitsOnly(lead?.mobile_phone || "");
+    const email = String(lead?.email || "").trim().toLowerCase();
+    return (externalId && syncedIds.has(externalId)) || (phone && syncedPhones.has(phone)) || (email && syncedEmails.has(email));
+  });
+
+  const checks = [
+    {
+      key: "duplicate_groups",
+      label: "Duplicate lead groups",
+      severity: duplicateGroups.length >= 3 ? "critical" : duplicateGroups.length ? "warning" : "good",
+      count: duplicateGroups.length,
+      examples: buildHealthCheckExamples(duplicateGroups, (cluster) => cluster?.matchLabel || summarizeLeadForHealthCheck(cluster?.keeper || {})),
+      action: "Review Scan Duplicate Groups and archive extras.",
+    },
+    {
+      key: "stale_followups",
+      label: "Stale follow-ups",
+      severity: staleFollowUps.length >= 3 ? "critical" : staleFollowUps.length ? "warning" : "good",
+      count: staleFollowUps.length,
+      examples: buildHealthCheckExamples(staleFollowUps, (lead) => summarizeLeadForHealthCheck(lead)),
+      action: "Use Clear Stale Follow-ups to reset old scheduling drift.",
+    },
+    {
+      key: "multi_active_appointments",
+      label: "Multiple active appointments",
+      severity: multiActiveAppointments.length ? "critical" : "good",
+      count: multiActiveAppointments.length,
+      examples: buildHealthCheckExamples(multiActiveAppointments, (group) => `${summarizeLeadForHealthCheck(group?.lead)} x${Array.isArray(group?.rows) ? group.rows.length : 0}`),
+      action: "Keep one active call-desk appointment per lead.",
+    },
+    {
+      key: "scheduled_without_appointment",
+      label: "Scheduled leads missing appointment rows",
+      severity: scheduledWithoutAppointment.length ? "critical" : "good",
+      count: scheduledWithoutAppointment.length,
+      examples: buildHealthCheckExamples(scheduledWithoutAppointment, (lead) => summarizeLeadForHealthCheck(lead)),
+      action: "Resave the lead or inspect portal_save_call_desk scheduling output.",
+    },
+    {
+      key: "archived_lead_leaks",
+      label: "Archived lead leaks",
+      severity: archivedLeadLeaks.length ? "critical" : "good",
+      count: archivedLeadLeaks.length,
+      examples: buildHealthCheckExamples(archivedLeadLeaks, (lead) => summarizeLeadForHealthCheck(lead)),
+      action: "Restore or rearchive leads so archived rows stay out of active queues.",
+    },
+    {
+      key: "contact_gaps",
+      label: "Call queue contact gaps",
+      severity: queueContactGaps.length >= 5 ? "critical" : queueContactGaps.length ? "warning" : "good",
+      count: queueContactGaps.length,
+      examples: buildHealthCheckExamples(queueContactGaps, (lead) => summarizeLeadForHealthCheck(lead)),
+      action: "Add a phone or email before leaving the lead in the call queue.",
+    },
+    {
+      key: "local_draft_conflicts",
+      label: "Local draft conflicts",
+      severity: localDraftConflicts.length ? "warning" : "good",
+      count: localDraftConflicts.length,
+      examples: buildHealthCheckExamples(localDraftConflicts, (lead) => summarizeLeadForHealthCheck(lead)),
+      action: "Hard refresh the portal to drop stale local drafts after sync.",
+    },
+  ];
+
+  const totals = {
+    duplicateGroups: duplicateGroups.length,
+    staleFollowUps: staleFollowUps.length,
+    scheduleMismatches: multiActiveAppointments.length + scheduledWithoutAppointment.length,
+    archivedLeadLeaks: archivedLeadLeaks.length,
+    contactGaps: queueContactGaps.length + localDraftConflicts.length,
+    totalFindings: checks.reduce((sum, check) => sum + Number(check?.count || 0), 0),
+  };
+
+  return {
+    generatedAt: nowIso(),
+    totals,
+    checks,
+  };
+}
+
+function renderHealthCheckTools() {
+  const summaryEl = document.getElementById("healthCheckSummary");
+  const table = document.getElementById("healthCheckTable");
+  const runBtn = document.getElementById("runHealthCheckBtn");
+  const duplicateCountEl = document.getElementById("healthCheckDuplicateCount");
+  const staleCountEl = document.getElementById("healthCheckStaleCount");
+  const scheduleCountEl = document.getElementById("healthCheckScheduleCount");
+  const archiveCountEl = document.getElementById("healthCheckArchiveCount");
+  const contactCountEl = document.getElementById("healthCheckContactCount");
+  if (!summaryEl || !table || !runBtn) return;
+
+  const isAdmin = canPublishContent();
+  runBtn.disabled = !isAdmin;
+  if (!isAdmin) {
+    summaryEl.textContent = "Admin access required.";
+    table.innerHTML = `<tr><td colspan="5" class="muted">Only admins can run portal health checks.</td></tr>`;
+    [duplicateCountEl, staleCountEl, scheduleCountEl, archiveCountEl, contactCountEl].forEach((el) => {
+      if (el) el.textContent = "-";
+    });
+    return;
+  }
+
+  const report = state.healthCheckReport;
+  if (!report) {
+    summaryEl.textContent = "Not run yet.";
+    table.innerHTML = `<tr><td colspan="5" class="muted">Run Health Check to inspect duplicates, schedule drift, archive leaks, and contact gaps.</td></tr>`;
+    [duplicateCountEl, staleCountEl, scheduleCountEl, archiveCountEl, contactCountEl].forEach((el) => {
+      if (el) el.textContent = "-";
+    });
+    return;
+  }
+
+  if (duplicateCountEl) duplicateCountEl.textContent = String(report?.totals?.duplicateGroups ?? 0);
+  if (staleCountEl) staleCountEl.textContent = String(report?.totals?.staleFollowUps ?? 0);
+  if (scheduleCountEl) scheduleCountEl.textContent = String(report?.totals?.scheduleMismatches ?? 0);
+  if (archiveCountEl) archiveCountEl.textContent = String(report?.totals?.archivedLeadLeaks ?? 0);
+  if (contactCountEl) contactCountEl.textContent = String(report?.totals?.contactGaps ?? 0);
+
+  const criticalCount = (Array.isArray(report?.checks) ? report.checks : []).filter((check) => check?.severity === "critical").length;
+  const warningCount = (Array.isArray(report?.checks) ? report.checks : []).filter((check) => check?.severity === "warning").length;
+  summaryEl.textContent = criticalCount
+    ? `${criticalCount} critical check(s) • ${warningCount} warning check(s) • ${formatDateTimeShort(report.generatedAt)}`
+    : warningCount
+      ? `${warningCount} warning check(s) • ${formatDateTimeShort(report.generatedAt)}`
+      : `All clear • ${formatDateTimeShort(report.generatedAt)}`;
+
+  table.innerHTML = report.checks.map((check) => {
+    const examples = Array.isArray(check?.examples) && check.examples.length
+      ? check.examples.map((item) => escapeHtml(String(item || ""))).join("<br />")
+      : `<span class="muted">No issues found.</span>`;
+    return `<tr>
+      <td>${escapeHtml(String(check?.label || ""))}</td>
+      <td><span class="health-check-severity" data-tone="${escapeHtml(healthCheckSeverityTone(check?.severity))}">${escapeHtml(String(check?.severity || "good"))}</span></td>
+      <td>${escapeHtml(String(check?.count ?? 0))}</td>
+      <td>${examples}</td>
+      <td>${escapeHtml(String(check?.action || "-"))}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function loadActiveCallDeskAppointmentsFromSupabase() {
+  if (!supabase || !canPublishContent()) return [];
+  const { data, error } = await supabase
+    .from("appointment")
+    .select("appointment_id, lead_id, booking_date, booking_status, appointment_type, owner")
+    .eq("owner", "call_desk")
+    .in("booking_status", ["Booked", "Rescheduled", "Pending"]);
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+async function refreshHealthCheckTools(options = {}) {
+  const summaryEl = document.getElementById("healthCheckSummary");
+  const statusEl = document.getElementById("purgeStatus");
+  const shouldLogAudit = Boolean(options.logAudit);
+  const shouldToast = Boolean(options.toast);
+  const updateStatus = options.status !== false;
+  if (!summaryEl) return;
+  if (!supabase || !canPublishContent()) {
+    state.healthCheckReport = null;
+    renderHealthCheckTools();
+    return;
+  }
+  summaryEl.textContent = "Running health check...";
+  try {
+    const appointmentRows = await loadActiveCallDeskAppointmentsFromSupabase();
+    state.healthCheckReport = buildMaintenanceHealthCheckReport(state.leads, appointmentRows);
+    renderHealthCheckTools();
+    if (shouldLogAudit) {
+      await appendCleanupAuditLog("health_check_run", {
+        duplicate_groups: Number(state.healthCheckReport?.totals?.duplicateGroups || 0),
+        stale_followups: Number(state.healthCheckReport?.totals?.staleFollowUps || 0),
+        schedule_mismatches: Number(state.healthCheckReport?.totals?.scheduleMismatches || 0),
+        archived_lead_leaks: Number(state.healthCheckReport?.totals?.archivedLeadLeaks || 0),
+        contact_gaps: Number(state.healthCheckReport?.totals?.contactGaps || 0),
+        total_findings: Number(state.healthCheckReport?.totals?.totalFindings || 0),
+      }).catch((error) => console.error(error));
+      await refreshCleanupAuditLog().catch(() => {});
+    }
+    if (updateStatus && statusEl) {
+      statusEl.textContent = state.healthCheckReport?.totals?.totalFindings
+        ? `Health check found ${state.healthCheckReport.totals.totalFindings} issue(s).`
+        : "Health check clean.";
+    }
+    if (shouldToast) {
+      const findingCount = Number(state.healthCheckReport?.totals?.totalFindings || 0);
+      showPortalToast(
+        findingCount ? `Health check found ${findingCount} issue(s).` : "Health check came back clean.",
+        findingCount ? "warning" : "success",
+        { title: "Health Check Complete" },
+      );
+    }
+  } catch (error) {
+    console.error(error);
+    state.healthCheckReport = null;
+    renderHealthCheckTools();
+    if (updateStatus && statusEl) statusEl.textContent = "Health check failed.";
+    if (shouldToast) {
+      showPortalToast(String(error?.message || error || "Health check failed."), "error", {
+        title: "Health Check Failed",
+      });
+    }
+  }
+}
+
+function renderDuplicateCleanupTools() {
+  const summaryEl = document.getElementById("duplicateCleanupSummary");
+  const table = document.getElementById("duplicateCleanupTable");
+  const scanBtn = document.getElementById("scanDuplicateGroupsBtn");
+  const clearBtn = document.getElementById("clearStaleFollowUpsBtn");
+  if (!summaryEl || !table || !scanBtn || !clearBtn) return;
+
+  const isAdmin = canPublishContent();
+  scanBtn.disabled = !isAdmin;
+  clearBtn.disabled = !isAdmin;
+  if (!isAdmin) {
+    summaryEl.textContent = "Admin access required.";
+    table.innerHTML = `<tr><td colspan="4" class="muted">Only admins can review and archive duplicate leads.</td></tr>`;
+    renderHealthCheckTools();
+    renderCleanupAuditLog();
+    return;
+  }
+
+  const clusters = buildDuplicateLeadClusters(state.leads);
+  const staleFollowUps = buildStaleFollowUpLeads(state.leads);
+  state.ui.maintenanceDuplicateClusters = clusters;
+  summaryEl.textContent = `${clusters.length} duplicate group(s) • ${staleFollowUps.length} stale follow-up row(s)`;
+
+  if (!clusters.length) {
+    table.innerHTML = `<tr><td colspan="4" class="muted">No active duplicate clusters found in the current lead set.</td></tr>`;
+    renderHealthCheckTools();
+    renderCleanupAuditLog();
+    return;
+  }
+
+  table.innerHTML = clusters
+    .slice(0, 50)
+    .map((cluster, index) => {
+      const keeper = cluster.keeper || {};
+      const keeperLabel = escapeHtml(
+        `${String(keeper.full_name || "").trim() || "Unnamed"} • ${String(keeper.mobile_phone || keeper.email || "-")}`,
+      );
+      const archiveLabel = cluster.archiveCandidates.length
+        ? cluster.archiveCandidates
+            .map((lead) =>
+              escapeHtml(`${String(lead.full_name || "").trim() || "Unnamed"} (${String(lead.mobile_phone || lead.email || "-")})`),
+            )
+            .join("<br />")
+        : `<span class="muted">Already cleaned</span>`;
+      return `<tr>
+        <td>${escapeHtml(cluster.matchLabel || "Shared identity")}</td>
+        <td>${keeperLabel}</td>
+        <td>${archiveLabel}</td>
+        <td><button class="ghost-button slim" type="button" data-archive-duplicate-group="${index}" ${cluster.archiveCandidates.length ? "" : "disabled"}>Archive ${cluster.archiveCandidates.length || 0}</button></td>
+      </tr>`;
+    })
+    .join("");
+  renderHealthCheckTools();
+  renderArchivedLeadTools();
+  renderCleanupAuditLog();
+}
+
 async function refreshCalendarTabData() {
   const statusEl = document.getElementById("calendarStatus");
   if (statusEl) statusEl.textContent = "Loading...";
@@ -2448,7 +3356,12 @@ async function refreshCalendarTabData() {
       const todayEnd = Date.parse(endOfDayIso(0));
       const monthEnd = Date.parse(endOfDayIso(30));
       const scheduledLeads = state.leads.filter(
-        (lead) => isSyncedLeadRecord(lead) && String(lead?.next_appointment_time || "").trim(),
+        (lead) =>
+          isSyncedLeadRecord(lead)
+          && String(lead?.next_appointment_time || "").trim()
+          && ["callback", "follow_up"].includes(
+            String(lead?.disposition || lead?.lead_status || "").trim().toLowerCase(),
+          ),
       );
       state.calendarTodayEvents = scheduledLeads
         .filter((lead) => {
@@ -2485,6 +3398,637 @@ async function refreshCalendarTabData() {
     state.calendarWeekEvents = [];
     renderCalendarTab();
   }
+}
+
+async function refreshPortalLeadState(statusText = "") {
+  if (!supabase) return;
+  const refreshedLeads = await loadLeadRowsFromSupabase();
+  renderDashboard({
+    leads: sanitizeLeadRows(refreshedLeads).rows,
+    activity: state.activity,
+    bookings: state.bookings,
+    sales: state.sales,
+    targets: state.targets,
+    sourcedLeads: state.sourcedLeads,
+    carrierDocs: state.carrierDocs,
+  });
+  await refreshCalendarTabData().catch(() => {});
+  await refreshHealthCheckTools({ logAudit: false, toast: false, status: false }).catch(() => {});
+  await refreshArchivedLeadTools().catch(() => {});
+  await refreshCallDeskActivityForLead().catch(() => {});
+  if (statusText) {
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = statusText;
+  }
+}
+
+async function loadCleanupAuditLogsFromSupabase() {
+  if (!supabase || !canPublishContent()) return [];
+  const { data, error } = await supabase
+    .from("maintenance_audit_log")
+    .select("id, action_type, actor_email, details_json, created_at")
+    .order("created_at", { ascending: false })
+    .limit(40);
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+async function appendCleanupAuditLog(actionType, details = {}) {
+  if (!supabase || !canPublishContent()) return;
+  const actorEmail =
+    String(state.auth?.profile?.email || "").trim()
+    || String(document.getElementById("portalUserEmail")?.textContent || "").trim()
+    || null;
+  const payload = {
+    action_type: String(actionType || "").trim() || "maintenance_action",
+    actor_email: actorEmail,
+    details_json: details,
+  };
+  const { error } = await supabase.from("maintenance_audit_log").insert(payload);
+  if (error) throw error;
+}
+
+function buildArchiveLeadSnapshot(lead) {
+  return {
+    lead_id: Number(lead?.lead_id || 0),
+    lead_external_id: String(lead?.lead_external_id || "").trim() || null,
+    first_name: String(lead?.first_name || "").trim() || null,
+    last_name: String(lead?.last_name || "").trim() || null,
+    full_name: String(lead?.full_name || "").trim() || null,
+    email: String(lead?.email || "").trim() || null,
+    mobile_phone: String(lead?.mobile_phone || "").trim() || null,
+    lead_status: String(lead?.lead_status || "").trim() || null,
+    disposition: String(lead?.disposition || "").trim() || null,
+    booking_status: String(lead?.booking_status || "").trim() || null,
+    next_appointment_time: lead?.next_appointment_time || null,
+    calendar_event_id: String(lead?.calendar_event_id || "").trim() || null,
+    contact_eligibility: String(lead?.contact_eligibility || "").trim() || null,
+    suppress_reason: String(lead?.suppress_reason || "").trim() || null,
+    pipeline_status: String(lead?.pipeline_status || "").trim() || null,
+    owner_queue: String(lead?.owner_queue || "").trim() || null,
+    recommended_next_action: String(lead?.recommended_next_action || "").trim() || null,
+    last_activity_at_source: lead?.last_activity_at_source || null,
+    notes: String(lead?.notes || "").trim() || null,
+    raw_tags: String(lead?.raw_tags || "").trim() || null,
+  };
+}
+
+function buildKeeperUndoSnapshot(lead) {
+  return {
+    lead_id: Number(lead?.lead_id || 0),
+    email: String(lead?.email || "").trim() || null,
+    mobile_phone: String(lead?.mobile_phone || "").trim() || null,
+    notes: String(lead?.notes || "").trim() || null,
+    raw_tags: String(lead?.raw_tags || "").trim() || null,
+    last_activity_at_source: lead?.last_activity_at_source || null,
+    suppress_reason: String(lead?.suppress_reason || "").trim() || null,
+  };
+}
+
+function buildAppointmentUndoSnapshot(row) {
+  return {
+    appointment_id: Number(row?.appointment_id || 0),
+    lead_id: Number(row?.lead_id || 0),
+    booking_date: row?.booking_date || null,
+    booking_status: String(row?.booking_status || "").trim() || null,
+    show_status: String(row?.show_status || "").trim() || null,
+    appointment_type: String(row?.appointment_type || "").trim() || null,
+    owner: String(row?.owner || "").trim() || null,
+  };
+}
+
+async function markCleanupAuditLogUndone(logRow, extraDetails = {}) {
+  if (!supabase || !canPublishContent() || !logRow?.id) return;
+  const actorEmail =
+    String(state.auth?.profile?.email || "").trim()
+    || String(document.getElementById("portalUserEmail")?.textContent || "").trim()
+    || null;
+  const details = {
+    ...(logRow?.details_json || {}),
+    ...extraDetails,
+    undo_applied: true,
+    undo_applied_at: nowIso(),
+    undo_actor_email: actorEmail,
+  };
+  const { error } = await supabase
+    .from("maintenance_audit_log")
+    .update({ details_json: details })
+    .eq("id", Number(logRow.id));
+  if (error) throw error;
+}
+
+function renderCleanupAuditLog() {
+  const summaryEl = document.getElementById("cleanupAuditSummary");
+  const table = document.getElementById("cleanupAuditTable");
+  if (!summaryEl || !table) return;
+  if (!canPublishContent()) {
+    summaryEl.textContent = "Admin access required.";
+    table.innerHTML = `<tr><td colspan="5" class="muted">Only admins can view cleanup audit entries.</td></tr>`;
+    return;
+  }
+  const rows = Array.isArray(state.cleanupAuditLogs) ? state.cleanupAuditLogs : [];
+  summaryEl.textContent = rows.length ? `${rows.length} recent action(s)` : "No cleanup actions logged yet.";
+  if (!rows.length) {
+    table.innerHTML = `<tr><td colspan="5" class="muted">No cleanup actions logged yet.</td></tr>`;
+    return;
+  }
+  table.innerHTML = rows.map((row) => {
+    const details = row?.details_json || {};
+    const detailText = Object.entries(details)
+      .slice(0, 4)
+      .map(([key, value]) => `${key}: ${Array.isArray(value) ? value.join(", ") : String(value ?? "")}`)
+      .join(" | ");
+    const canUndo = row?.action_type === "duplicate_archive"
+      && !details.undo_applied
+      && Array.isArray(details.archived_leads_before)
+      && details.archived_leads_before.length;
+    const undoCell = details.undo_applied
+      ? `<span class="muted">Undone</span>`
+      : canUndo
+        ? `<button class="ghost-button slim" type="button" data-undo-duplicate-archive="${Number(row.id)}">Undo archive</button>`
+        : `<span class="muted">-</span>`;
+    return `<tr>
+      <td>${escapeHtml(formatDateTimeShort(row.created_at))}</td>
+      <td>${escapeHtml(String(row.action_type || "").replaceAll("_", " "))}</td>
+      <td>${escapeHtml(String(row.actor_email || "-"))}</td>
+      <td>${escapeHtml(detailText || "-")}</td>
+      <td>${undoCell}</td>
+    </tr>`;
+  }).join("");
+}
+
+async function refreshCleanupAuditLog() {
+  const summaryEl = document.getElementById("cleanupAuditSummary");
+  if (!summaryEl) return;
+  if (!supabase || !canPublishContent()) {
+    state.cleanupAuditLogs = [];
+    renderCleanupAuditLog();
+    return;
+  }
+  summaryEl.textContent = "Loading audit log...";
+  try {
+    state.cleanupAuditLogs = await loadCleanupAuditLogsFromSupabase();
+  } catch (error) {
+    console.error(error);
+    summaryEl.textContent = "Audit log not configured yet.";
+    return;
+  }
+  renderCleanupAuditLog();
+}
+
+async function loadArchivedLeadsFromSupabase() {
+  if (!supabase || !canPublishContent()) return [];
+  const { data, error } = await supabase
+    .from("lead_master")
+    .select("lead_id, lead_external_id, full_name, first_name, last_name, email, mobile_phone, suppress_reason, last_activity_at_source, updated_at, lead_status, disposition")
+    .eq("lead_status", "archived")
+    .eq("owner_queue", "archive")
+    .like("suppress_reason", "manual_archive%")
+    .order("last_activity_at_source", { ascending: false })
+    .limit(75);
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+function renderArchivedLeadTools() {
+  const summaryEl = document.getElementById("archivedLeadSummary");
+  const table = document.getElementById("archivedLeadsTable");
+  const refreshBtn = document.getElementById("refreshArchivedLeadsBtn");
+  if (!summaryEl || !table || !refreshBtn) return;
+  const isAdmin = canPublishContent();
+  refreshBtn.disabled = !isAdmin;
+  if (!isAdmin) {
+    summaryEl.textContent = "Admin access required.";
+    table.innerHTML = `<tr><td colspan="5" class="muted">Only admins can restore archived leads.</td></tr>`;
+    return;
+  }
+  const rows = Array.isArray(state.archivedLeads) ? state.archivedLeads : [];
+  summaryEl.textContent = rows.length ? `${rows.length} archived lead(s)` : "No soft-archived leads found.";
+  if (!rows.length) {
+    table.innerHTML = `<tr><td colspan="5" class="muted">No soft-archived leads found.</td></tr>`;
+    return;
+  }
+  table.innerHTML = rows.map((lead) => {
+    const name = getLeadDisplayName(lead);
+    const contact = String(lead.mobile_phone || lead.email || "-");
+    const reason = String(lead.suppress_reason || "manual_archive").replaceAll("_", " ");
+    const updated = formatDateTimeShort(lead.last_activity_at_source || lead.updated_at || "");
+    return `<tr>
+      <td>${escapeHtml(name)}</td>
+      <td>${escapeHtml(contact)}</td>
+      <td>${escapeHtml(reason)}</td>
+      <td>${escapeHtml(updated)}</td>
+      <td><button class="ghost-button slim" type="button" data-restore-archived-lead="${escapeHtml(String(lead.lead_external_id || ""))}">Restore lead</button></td>
+    </tr>`;
+  }).join("");
+}
+
+async function refreshArchivedLeadTools() {
+  const summaryEl = document.getElementById("archivedLeadSummary");
+  if (!summaryEl) return;
+  if (!supabase || !canPublishContent()) {
+    state.archivedLeads = [];
+    renderArchivedLeadTools();
+    return;
+  }
+  summaryEl.textContent = "Loading archived leads...";
+  try {
+    state.archivedLeads = await loadArchivedLeadsFromSupabase();
+  } catch (error) {
+    console.error(error);
+    summaryEl.textContent = "Archived lead restore not configured.";
+    return;
+  }
+  renderArchivedLeadTools();
+}
+
+function clearCurrentCallDeskLeadSelection() {
+  state.ui.selectedCallDeskLeadId = "";
+  state.ui.currentCallLeadId = "";
+  state.ui.leadId = null;
+  state.ui.currentLeadEmail = "";
+  [
+    "deskClientName",
+    "deskPhone",
+    "deskCoverage",
+    "deskBudgetText",
+    "deskCurrentCoverage",
+    "deskExistingPolicy",
+    "deskPolicyIntent",
+    "deskDecisionMaker",
+    "deskDecisionTimeline",
+    "deskGoalNote",
+    "deskHealthNotes",
+    "deskObjection",
+    "deskDisposition",
+    "deskNextStep",
+    "deskFollowUp",
+    "deskCallNotes",
+  ].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  const syncToggle = document.getElementById("deskSyncGog");
+  if (syncToggle) syncToggle.checked = true;
+  updateSyncToggleUi();
+  updateCallDeskArchiveButton();
+  renderCallDeskActivity([]);
+  renderLead360(null);
+  renderCommsHub(null);
+  state.leadDocuments = [];
+  state.ui.selectedLeadDocumentId = "";
+  clearLeadDocumentInputs();
+  renderLeadDocuments(null);
+}
+
+async function archiveCurrentLead() {
+  const statusEl = document.getElementById("callDeskStatus");
+  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!canPublishContent()) throw new Error("Admin access required.");
+  const lead = getCurrentSelectedLead();
+  if (!lead?.lead_external_id || Number(lead?.lead_id || 0) <= 0) {
+    throw new Error("Load a synced lead before archiving.");
+  }
+  const leadName = getLeadDisplayName(lead);
+  const confirmed = window.confirm(`Archive ${leadName} and remove it from active queues?`);
+  if (!confirmed) return;
+  if (statusEl) statusEl.textContent = "Archiving lead...";
+  const { error } = await supabase
+    .from("lead_master")
+    .update({
+      lead_status: "archived",
+      disposition: "archived",
+      booking_status: "not_started",
+      next_appointment_time: null,
+      calendar_event_id: null,
+      contact_eligibility: "blocked",
+      suppress_reason: "manual_archive_call_desk",
+      pipeline_status: "archived",
+      owner_queue: "archive",
+      recommended_next_action: "Lead manually archived",
+      last_activity_at_source: nowIso(),
+    })
+    .eq("lead_id", Number(lead.lead_id));
+  if (error) throw error;
+
+  const { error: appointmentError } = await supabase
+    .from("appointment")
+    .update({
+      booking_status: "Canceled",
+      show_status: "canceled",
+    })
+    .eq("lead_id", Number(lead.lead_id))
+    .eq("owner", "call_desk")
+    .in("booking_status", ["Booked", "Rescheduled", "Pending"]);
+  if (appointmentError) throw appointmentError;
+
+  await appendCallDeskActivityLog({
+    leadId: lead.lead_id,
+    activityType: "lead_archived",
+    outcome: "archived",
+    notes: "Lead archived from Call Desk.",
+  }).catch((error) => console.error(error));
+  await appendCleanupAuditLog("lead_archived", {
+    lead_id: Number(lead.lead_id),
+    lead_external_id: String(lead.lead_external_id || "").trim(),
+    full_name: leadName,
+  }).catch((error) => console.error(error));
+
+  clearCurrentCallDeskLeadSelection();
+  setDeskLeadPickerStatus(`${leadName} archived.`);
+  if (statusEl) statusEl.textContent = "Lead archived";
+  await refreshPortalLeadState(`Archived ${leadName}.`);
+  await refreshArchivedLeadTools().catch(() => {});
+  showPortalToast(`${leadName} archived. You can restore it from Maintenance.`, "warning", { title: "Lead Archived" });
+}
+
+async function restoreArchivedLead(leadExternalId) {
+  const id = String(leadExternalId || "").trim();
+  const statusEl = document.getElementById("purgeStatus");
+  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!canPublishContent()) throw new Error("Admin access required.");
+  const lead = (Array.isArray(state.archivedLeads) ? state.archivedLeads : []).find(
+    (row) => String(row?.lead_external_id || "").trim() === id,
+  );
+  if (!lead || Number(lead?.lead_id || 0) <= 0) throw new Error("Archived lead not found.");
+  const leadName = getLeadDisplayName(lead);
+  const confirmed = window.confirm(`Restore ${leadName} to the active call queue?`);
+  if (!confirmed) return;
+  if (statusEl) statusEl.textContent = "Restoring archived lead...";
+  const { error } = await supabase
+    .from("lead_master")
+    .update({
+      lead_status: "working",
+      disposition: "working",
+      booking_status: "not_started",
+      next_appointment_time: null,
+      calendar_event_id: null,
+      contact_eligibility: "review_required",
+      suppress_reason: null,
+      pipeline_status: null,
+      owner_queue: "call_desk_queue",
+      recommended_next_action: "Resume call desk outreach",
+      last_activity_at_source: nowIso(),
+    })
+    .eq("lead_id", Number(lead.lead_id));
+  if (error) throw error;
+
+  await appendCallDeskActivityLog({
+    leadId: lead.lead_id,
+    activityType: "lead_restored",
+    outcome: "working",
+    notes: "Lead restored from Maintenance archive.",
+  }).catch((activityError) => console.error(activityError));
+  await appendCleanupAuditLog("lead_restored", {
+    lead_id: Number(lead.lead_id),
+    lead_external_id: id,
+    full_name: leadName,
+  }).catch((auditError) => console.error(auditError));
+
+  await refreshPortalLeadState(`Restored ${leadName}.`);
+  await refreshArchivedLeadTools().catch(() => {});
+  setDeskLeadPickerStatus(`${leadName} restored to active queue.`);
+  showPortalToast(`${leadName} restored to the active queue.`, "success", { title: "Lead Restored" });
+}
+
+async function archiveDuplicateCluster(clusterIndex) {
+  const statusEl = document.getElementById("purgeStatus");
+  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!canPublishContent()) throw new Error("Admin access required.");
+  const cluster = state.ui.maintenanceDuplicateClusters?.[Number(clusterIndex)];
+  const archiveCandidates = Array.isArray(cluster?.archiveCandidates) ? cluster.archiveCandidates : [];
+  const keeper = cluster?.keeper || null;
+  const leadIds = archiveCandidates.map((lead) => Number(lead?.lead_id || 0)).filter((id) => id > 0);
+  if (!leadIds.length) {
+    if (statusEl) statusEl.textContent = "Nothing left to archive in that duplicate group.";
+    return;
+  }
+
+  const confirmed = window.confirm(
+    `Archive ${leadIds.length} duplicate lead(s) and keep ${String(keeper?.full_name || "the primary lead")} active?`,
+  );
+  if (!confirmed) return;
+
+  if (statusEl) statusEl.textContent = "Archiving duplicates...";
+  const keeperPatch = buildKeeperMergePatch(keeper, archiveCandidates);
+  const keeperLeadId = Number(keeper?.lead_id || 0);
+  if (keeperLeadId > 0) {
+    const { error: keeperError } = await supabase
+      .from("lead_master")
+      .update(keeperPatch)
+      .eq("lead_id", keeperLeadId);
+    if (keeperError) throw keeperError;
+  }
+  const archiveNote = keeper?.lead_external_id
+    ? `duplicate_archived_keep_${String(keeper.lead_external_id).trim()}`
+    : "duplicate_archived";
+  const { error } = await supabase
+    .from("lead_master")
+    .update({
+      lead_status: "archived",
+      disposition: "archived",
+      booking_status: "not_started",
+      next_appointment_time: null,
+      calendar_event_id: null,
+      contact_eligibility: "blocked",
+      suppress_reason: archiveNote,
+      pipeline_status: "archived",
+      owner_queue: "archive",
+      recommended_next_action: "Archived duplicate lead",
+      last_activity_at_source: nowIso(),
+    })
+    .in("lead_id", leadIds);
+  if (error) throw error;
+
+  const { data: appointmentRows, error: appointmentReadError } = await supabase
+    .from("appointment")
+    .select("appointment_id, lead_id, booking_date, booking_status, show_status, appointment_type, owner")
+    .in("lead_id", leadIds)
+    .eq("owner", "call_desk");
+  if (appointmentReadError) throw appointmentReadError;
+
+  const { error: appointmentError } = await supabase
+    .from("appointment")
+    .update({
+      booking_status: "Canceled",
+      show_status: "canceled",
+    })
+    .in("lead_id", leadIds)
+    .eq("owner", "call_desk")
+    .in("booking_status", ["Booked", "Rescheduled", "Pending"]);
+  if (appointmentError) throw appointmentError;
+
+  await appendCleanupAuditLog("duplicate_archive", {
+    keeper_lead_id: keeperLeadId,
+    keeper_external_id: String(keeper?.lead_external_id || "").trim(),
+    archived_lead_ids: leadIds,
+    archived_external_ids: archiveCandidates.map((lead) => String(lead?.lead_external_id || "").trim()).filter(Boolean),
+    merged_notes: Boolean(keeperPatch.notes),
+    merged_tags: Boolean(keeperPatch.raw_tags),
+    keeper_before: buildKeeperUndoSnapshot(keeper),
+    archived_leads_before: archiveCandidates.map((lead) => buildArchiveLeadSnapshot(lead)),
+    archived_appointments_before: (Array.isArray(appointmentRows) ? appointmentRows : []).map((row) => buildAppointmentUndoSnapshot(row)),
+  }).catch((error) => console.error(error));
+
+  state.createdLeads = (Array.isArray(state.createdLeads) ? state.createdLeads : []).filter((lead) => {
+    const rowPhone = digitsOnly(lead?.mobile_phone || "");
+    const rowEmail = String(lead?.email || "").trim().toLowerCase();
+    return !archiveCandidates.some((candidate) => {
+      if (getLeadExternalId(lead) && getLeadExternalId(lead) === getLeadExternalId(candidate)) return true;
+      if (rowPhone && rowPhone === digitsOnly(candidate?.mobile_phone || "")) return true;
+      if (rowEmail && rowEmail === String(candidate?.email || "").trim().toLowerCase()) return true;
+      return false;
+    });
+  });
+  saveCreatedLeads();
+  await refreshPortalLeadState(`Archived ${leadIds.length} duplicate lead(s).`);
+  await refreshCleanupAuditLog().catch(() => {});
+  showPortalToast(`Archived ${leadIds.length} duplicate lead(s) and kept ${getLeadDisplayName(keeper)} active.`, "success", {
+    title: "Duplicates Cleaned",
+  });
+}
+
+async function undoDuplicateArchive(logId) {
+  const statusEl = document.getElementById("purgeStatus");
+  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!canPublishContent()) throw new Error("Admin access required.");
+  const logRow = (Array.isArray(state.cleanupAuditLogs) ? state.cleanupAuditLogs : []).find(
+    (row) => Number(row?.id || 0) === Number(logId),
+  );
+  const details = logRow?.details_json || {};
+  const archivedLeads = Array.isArray(details.archived_leads_before) ? details.archived_leads_before : [];
+  const archivedAppointments = Array.isArray(details.archived_appointments_before) ? details.archived_appointments_before : [];
+  const keeperBefore = details.keeper_before || null;
+  if (!logRow || logRow.action_type !== "duplicate_archive" || !archivedLeads.length) {
+    if (statusEl) statusEl.textContent = "Nothing to undo for that archive action.";
+    return;
+  }
+  if (details.undo_applied) {
+    if (statusEl) statusEl.textContent = "That archive action was already undone.";
+    return;
+  }
+  const confirmed = window.confirm(
+    `Undo archive and restore ${archivedLeads.length} lead(s) from this cleanup action?`,
+  );
+  if (!confirmed) return;
+  if (statusEl) statusEl.textContent = "Restoring archived duplicates...";
+
+  if (Number(keeperBefore?.lead_id || 0) > 0) {
+    const { error: keeperError } = await supabase
+      .from("lead_master")
+      .update({
+        email: keeperBefore.email,
+        mobile_phone: keeperBefore.mobile_phone,
+        notes: keeperBefore.notes,
+        raw_tags: keeperBefore.raw_tags,
+        last_activity_at_source: keeperBefore.last_activity_at_source,
+        suppress_reason: keeperBefore.suppress_reason,
+      })
+      .eq("lead_id", Number(keeperBefore.lead_id));
+    if (keeperError) throw keeperError;
+  }
+
+  for (const snapshot of archivedLeads) {
+    const leadId = Number(snapshot?.lead_id || 0);
+    if (!leadId) continue;
+    const { error } = await supabase
+      .from("lead_master")
+      .update({
+        lead_status: snapshot.lead_status,
+        disposition: snapshot.disposition,
+        booking_status: snapshot.booking_status,
+        next_appointment_time: snapshot.next_appointment_time,
+        calendar_event_id: snapshot.calendar_event_id,
+        contact_eligibility: snapshot.contact_eligibility,
+        suppress_reason: snapshot.suppress_reason,
+        pipeline_status: snapshot.pipeline_status,
+        owner_queue: snapshot.owner_queue,
+        recommended_next_action: snapshot.recommended_next_action,
+        last_activity_at_source: snapshot.last_activity_at_source,
+      })
+      .eq("lead_id", leadId);
+    if (error) throw error;
+  }
+
+  for (const snapshot of archivedAppointments) {
+    const appointmentId = Number(snapshot?.appointment_id || 0);
+    if (!appointmentId) continue;
+    const { error } = await supabase
+      .from("appointment")
+      .update({
+        booking_date: snapshot.booking_date,
+        booking_status: snapshot.booking_status,
+        show_status: snapshot.show_status,
+        appointment_type: snapshot.appointment_type,
+      })
+      .eq("appointment_id", appointmentId);
+    if (error) throw error;
+  }
+
+  await markCleanupAuditLogUndone(logRow, {
+    restored_lead_ids: archivedLeads.map((row) => Number(row?.lead_id || 0)).filter((id) => id > 0),
+  });
+  await appendCleanupAuditLog("duplicate_archive_undone", {
+    source_audit_log_id: Number(logRow.id),
+    restored_lead_ids: archivedLeads.map((row) => Number(row?.lead_id || 0)).filter((id) => id > 0),
+    restored_appointment_ids: archivedAppointments.map((row) => Number(row?.appointment_id || 0)).filter((id) => id > 0),
+    keeper_lead_id: Number(keeperBefore?.lead_id || 0) || null,
+  }).catch((error) => console.error(error));
+
+  await refreshPortalLeadState(`Restored ${archivedLeads.length} archived duplicate lead(s).`);
+  await refreshCleanupAuditLog().catch(() => {});
+  showPortalToast(`Restored ${archivedLeads.length} archived duplicate lead(s).`, "success", {
+    title: "Archive Undone",
+  });
+}
+
+async function clearStaleFollowUps() {
+  const statusEl = document.getElementById("purgeStatus");
+  if (!supabase) throw new Error("Supabase is not configured.");
+  if (!canPublishContent()) throw new Error("Admin access required.");
+  const staleLeads = buildStaleFollowUpLeads(state.leads);
+  const leadIds = staleLeads.map((lead) => Number(lead?.lead_id || 0)).filter((id) => id > 0);
+  if (!leadIds.length) {
+    if (statusEl) statusEl.textContent = "No stale follow-ups to clear.";
+    return;
+  }
+
+  const confirmed = window.confirm(`Clear stale follow-up state for ${leadIds.length} lead(s)?`);
+  if (!confirmed) return;
+  if (statusEl) statusEl.textContent = "Clearing stale follow-ups...";
+
+  const { error } = await supabase
+    .from("lead_master")
+    .update({
+      next_appointment_time: null,
+      booking_status: "not_started",
+      calendar_event_id: null,
+      last_activity_at_source: nowIso(),
+    })
+    .in("lead_id", leadIds);
+  if (error) throw error;
+
+  const { error: appointmentError } = await supabase
+    .from("appointment")
+    .update({
+      booking_status: "Canceled",
+      show_status: "canceled",
+    })
+    .in("lead_id", leadIds)
+    .eq("owner", "call_desk")
+    .in("booking_status", ["Booked", "Rescheduled", "Pending"]);
+  if (appointmentError) throw appointmentError;
+
+  await appendCleanupAuditLog("stale_followups_cleared", {
+    cleared_lead_ids: leadIds,
+    cleared_count: leadIds.length,
+  }).catch((error) => console.error(error));
+
+  await refreshPortalLeadState(`Cleared ${leadIds.length} stale follow-up row(s).`);
+  await refreshCleanupAuditLog().catch(() => {});
+  showPortalToast(`Cleared ${leadIds.length} stale follow-up row(s).`, "success", {
+    title: "Follow-ups Cleared",
+  });
 }
 
 function buildSummary(leads, activity, bookings, sales, targets) {
@@ -3938,9 +5482,15 @@ async function saveCarrierConfigs() {
       });
     }
     if (statusEl) statusEl.textContent = "Saved";
+    showPortalToast("Carrier settings were saved.", "success", { title: "Carrier Settings Saved" });
   } catch (error) {
     console.error(error);
     if (statusEl) statusEl.textContent = supabase ? "Saved locally (Supabase unavailable)" : "Saved locally (API unavailable)";
+    showPortalToast(
+      supabase ? "Carrier settings were saved locally, but Supabase was unavailable." : "Carrier settings were saved locally, but the API was unavailable.",
+      "warning",
+      { title: "Carrier Settings Partially Saved", duration: 5000 },
+    );
   }
   renderCarrierActionCard();
 }
@@ -4774,7 +6324,7 @@ function renderDeskReadiness() {
   const saveBtn = document.getElementById("deskSaveToNotesBtn");
   if (!missing.length) {
     if (headingEl) {
-      headingEl.textContent = "Ready to Quote";
+      headingEl.textContent = "Ready to quote";
       headingEl.classList.add("ready-pill");
     }
     statusEl.textContent = "Ready to quote: all required answers are captured.";
@@ -4790,7 +6340,7 @@ function renderDeskReadiness() {
 
   statusEl.textContent = `Missing ${missing.length} required field${missing.length === 1 ? "" : "s"} before quoting.`;
   if (headingEl) {
-    headingEl.textContent = "Required before quote";
+    headingEl.textContent = "Checklist before quote";
     headingEl.classList.remove("ready-pill");
   }
   statusEl.style.background = "var(--amber-soft)";
@@ -4862,10 +6412,10 @@ function renderWorkflowAdvisor() {
     if (title) {
       title.textContent =
         path === "health"
-          ? "Recommended health path"
+          ? "Best health path"
           : path === "both" || path === "unclear"
-            ? "Recommended first move"
-            : "Quote order and lane";
+            ? "Best first move"
+            : "Best next move";
     }
     deskLane.textContent = liveCarrier.lane || result.lane;
     renderChipList("deskWorkflowPrimary", matchedPrimary.length ? matchedPrimary : [fallbackPrimary], "primary");
@@ -5162,6 +6712,635 @@ function renderNotesHistory(history, fieldIds) {
   });
 }
 
+function renderCallDeskActivity(entries = []) {
+  const container = document.getElementById("callDeskActivityList");
+  const statusEl = document.getElementById("callDeskActivityStatus");
+  if (!container || !statusEl) return;
+  const rows = Array.isArray(entries) ? entries : [];
+  if (!rows.length) {
+    container.innerHTML = `<p class="muted">No CRM actions recorded for this lead yet.</p>`;
+    statusEl.textContent = state.ui.selectedCallDeskLeadId ? "No activity yet" : "No lead selected";
+    return;
+  }
+  statusEl.textContent = `${rows.length} recent action(s)`;
+  container.innerHTML = rows.map((row) => {
+    const when = formatDateTimeShort(row.activity_date || row.inserted_at);
+    const type = String(row.activity_type || "update").replaceAll("_", " ");
+    const outcome = String(row.outcome || "").trim();
+    const meta = [
+      when,
+      type,
+      outcome ? `Outcome: ${outcome}` : "",
+      String(row.owner || "").trim() ? `By: ${row.owner}` : "",
+    ].filter(Boolean);
+    return `
+      <div class="notes-history-item">
+        <div>
+          <strong>${escapeHtml(type)}</strong>
+          <div class="crm-activity-meta">${meta.map((item) => `<span>${escapeHtml(item)}</span>`).join("")}</div>
+        </div>
+        <div class="crm-activity-note">${escapeHtml(String(row.notes || "No extra notes."))}</div>
+      </div>
+    `;
+  }).join("");
+}
+
+function getCurrentCallDeskContactDetails() {
+  const lead = getCurrentSelectedLead();
+  const clientName = String(document.getElementById("deskClientName")?.value || getLeadDisplayName(lead || {})).trim();
+  const phone = String(document.getElementById("deskPhone")?.value || lead?.mobile_phone || "").trim();
+  const email = String(state.ui.currentLeadEmail || lead?.email || "").trim();
+  return { lead, clientName, phone, email };
+}
+
+function openContactChannel(kind) {
+  const { clientName, phone, email } = getCurrentCallDeskContactDetails();
+  if (kind === "call") {
+    const digits = digitsOnly(phone);
+    if (!digits) throw new Error("Add a phone number first.");
+    window.location.href = `tel:${digits}`;
+    return;
+  }
+  if (kind === "text") {
+    const digits = digitsOnly(phone);
+    if (!digits) throw new Error("Add a phone number first.");
+    window.location.href = `sms:${digits}`;
+    return;
+  }
+  if (kind === "email") {
+    if (!email) throw new Error("Add an email address first.");
+    const subject = encodeURIComponent(`Insurance follow-up for ${clientName || "client"}`);
+    window.location.href = `mailto:${encodeURIComponent(email)}?subject=${subject}`;
+    return;
+  }
+  if (kind === "copy") {
+    const copyTarget = [clientName, phone, email].filter(Boolean).join(" | ");
+    if (!copyTarget) throw new Error("No contact details available yet.");
+    copyText(copyTarget);
+  }
+}
+
+function renderLead360(leadRow = null) {
+  const lead = leadRow || getCurrentSelectedLead();
+  const statusEl = document.getElementById("lead360Status");
+  const setText = (id, value) => {
+    const el = document.getElementById(id);
+    if (el) el.textContent = value;
+  };
+  if (!lead) {
+    if (statusEl) statusEl.textContent = "No lead selected";
+    setText("lead360Client", "-");
+    setText("lead360Contact", "-");
+    setText("lead360Disposition", "-");
+    setText("lead360FollowUp", "-");
+    setText("lead360Queue", "-");
+    setText("lead360Pipeline", "-");
+    setText("lead360Carrier", "-");
+    setText("lead360Activity", "-");
+    return;
+  }
+  if (statusEl) statusEl.textContent = "Synced to CRM";
+  const pipelineValue = String(lead.pipeline_status || "").trim();
+  setText("lead360Client", getLeadDisplayName(lead));
+  setText("lead360Contact", String(lead.mobile_phone || lead.email || "-"));
+  setText("lead360Disposition", toTitleCase(String(lead.disposition || lead.lead_status || "working").replaceAll("_", " ")));
+  setText("lead360FollowUp", String(lead.next_appointment_time || "").trim() ? formatDateTimeShort(lead.next_appointment_time) : "Not scheduled");
+  setText("lead360Queue", toFriendlyQueueLabel(String(lead.owner_queue || lead.routing_bucket || "unassigned")));
+  setText("lead360Pipeline", pipelineValue ? pipelineStageLabel(pipelineValue) : "Not started");
+  setText("lead360Carrier", String(lead.carrier_match || "Not matched"));
+  setText("lead360Activity", formatDateTimeShort(lead.last_activity_at_source || lead.inserted_at || ""));
+}
+
+function buildCommsTimelineEntries(lead = null) {
+  if (!lead) return [];
+  const notesState = loadNotesState();
+  const phoneDigits = digitsOnly(lead?.mobile_phone || "");
+  const leadName = getLeadDisplayName(lead).trim().toLowerCase();
+  const noteEntries = (Array.isArray(notesState?.history) ? notesState.history : [])
+    .filter((entry) => {
+      const snapshot = entry?.snapshot || {};
+      const snapshotName = String(snapshot.notesClientName || "").trim().toLowerCase();
+      const snapshotPhone = digitsOnly(snapshot.notesPhone || snapshot.deskPhone || "");
+      if (phoneDigits && snapshotPhone && phoneDigits === snapshotPhone) return true;
+      if (leadName && snapshotName && leadName === snapshotName) return true;
+      return false;
+    })
+    .map((entry) => ({
+      when: entry.savedAt,
+      title: formatNotesTitle(entry.snapshot || {}),
+      type: "note",
+      body: Object.values(entry.snapshot || {}).filter(Boolean).join(" | ") || "Saved call note.",
+    }));
+  const crmEntries = (Array.isArray(state.callDeskActivityEntries) ? state.callDeskActivityEntries : []).map((row) => ({
+    when: row.activity_date || row.inserted_at,
+    title: String(row.activity_type || "crm_update").replaceAll("_", " "),
+    type: "crm",
+    body: String(row.notes || "CRM activity recorded."),
+  }));
+  return [...crmEntries, ...noteEntries]
+    .sort((a, b) => (Date.parse(String(b.when || "")) || 0) - (Date.parse(String(a.when || "")) || 0))
+    .slice(0, 12);
+}
+
+function renderCommsHub(leadRow = null) {
+  const lead = leadRow || getCurrentSelectedLead();
+  const statusEl = document.getElementById("commsHubStatus");
+  const container = document.getElementById("commsTimelineList");
+  if (!statusEl || !container) return;
+  const buttons = [
+    document.getElementById("commsDialBtn"),
+    document.getElementById("commsTextBtn"),
+    document.getElementById("commsEmailBtn"),
+    document.getElementById("commsCopyBtn"),
+    document.getElementById("deskDialBtn"),
+    document.getElementById("deskTextBtn"),
+    document.getElementById("deskEmailBtn"),
+  ];
+  buttons.forEach((btn) => {
+    if (btn instanceof HTMLButtonElement) btn.disabled = !lead;
+  });
+  if (!lead) {
+    statusEl.textContent = "No lead selected";
+    container.innerHTML = `<p class="muted">Load a lead to see call notes and CRM actions in one place.</p>`;
+    return;
+  }
+  const rows = buildCommsTimelineEntries(lead);
+  statusEl.textContent = rows.length ? `${rows.length} recent touchpoint(s)` : "No touchpoints yet";
+  if (!rows.length) {
+    container.innerHTML = `<p class="muted">No notes or CRM actions yet for this lead.</p>`;
+    return;
+  }
+  container.innerHTML = rows.map((row) => `
+    <div class="notes-history-item">
+      <div>
+        <strong>${escapeHtml(toTitleCase(String(row.title || "").replaceAll("_", " ")))}</strong>
+        <div class="crm-activity-meta">
+          <span>${escapeHtml(formatDateTimeShort(row.when))}</span>
+          <span>${escapeHtml(String(row.type || "touchpoint"))}</span>
+        </div>
+      </div>
+      <div class="crm-activity-note">${escapeHtml(String(row.body || ""))}</div>
+    </div>
+  `).join("");
+}
+
+function canUseLeadDocumentHub(lead = null) {
+  const currentLead = lead || getCurrentSelectedLead();
+  return Boolean(API_ORIGIN && String(currentLead?.lead_external_id || "").trim());
+}
+
+function formatFileSize(bytes) {
+  const value = Number(bytes || 0);
+  if (!Number.isFinite(value) || value <= 0) return "";
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function leadDocumentCategoryLabel(value) {
+  const key = String(value || "").trim().toLowerCase();
+  const labels = {
+    general: "General",
+    application: "Application",
+    policy: "Policy",
+    id: "ID / Identity",
+    underwriting: "Underwriting",
+    proof: "Proof / Support",
+  };
+  return labels[key] || toTitleCase(key.replaceAll("_", " ")) || "Document";
+}
+
+function inferLeadDocumentRequirements(lead = null, docs = []) {
+  if (!lead) return [];
+  const categories = new Set((Array.isArray(docs) ? docs : []).map((row) => String(row?.documentCategory || "").trim().toLowerCase()).filter(Boolean));
+  const disposition = String(lead.disposition || lead.lead_status || "").trim().toLowerCase();
+  const pipeline = String(lead.pipeline_status || "").trim().toLowerCase();
+  const productContext = `${String(lead.product_line || "")} ${String(lead.product_interest || "")}`.toLowerCase();
+  const activePipeline = new Set(["app_submitted", "underwriting", "approved", "issued", "paid"]);
+  const underwritingPipeline = new Set(["underwriting", "approved", "issued", "paid"]);
+  const issuedPipeline = new Set(["issued", "paid"]);
+  const needQuotedPack = new Set(["quoted", "sold"]);
+  const items = [];
+  const pushRequirement = (category, label, why, required) => {
+    if (!required) return;
+    items.push({
+      category,
+      label,
+      why,
+      complete: categories.has(category),
+    });
+  };
+
+  pushRequirement(
+    "id",
+    "ID / identity proof",
+    "Needed once the lead is quoted or moved into application work.",
+    needQuotedPack.has(disposition) || activePipeline.has(pipeline),
+  );
+  pushRequirement(
+    "application",
+    "Application packet",
+    "Needed when a quote is moving toward submission.",
+    needQuotedPack.has(disposition) || activePipeline.has(pipeline),
+  );
+  pushRequirement(
+    "underwriting",
+    "Underwriting documents",
+    "Needed once the case enters underwriting review.",
+    underwritingPipeline.has(pipeline),
+  );
+  pushRequirement(
+    "policy",
+    "Policy / delivery docs",
+    "Needed once the policy is sold or issued.",
+    disposition === "sold" || issuedPipeline.has(pipeline),
+  );
+  pushRequirement(
+    "proof",
+    "Proof / support docs",
+    "Health cases usually need supporting documents during quoting or submission.",
+    productContext.includes("health") && (needQuotedPack.has(disposition) || activePipeline.has(pipeline)),
+  );
+  return items;
+}
+
+function canPreviewLeadDocument(row = null) {
+  const url = String(row?.downloadUrl || row?.sourceUrl || "").trim().toLowerCase();
+  const mime = String(row?.mimeType || "").trim().toLowerCase();
+  const name = String(row?.fileName || "").trim().toLowerCase();
+  if (!url) return false;
+  if (mime.startsWith("image/") || mime === "application/pdf") return true;
+  if (url.endsWith(".pdf") || name.endsWith(".pdf")) return true;
+  if (/\.(png|jpg|jpeg|webp|gif)$/i.test(url) || /\.(png|jpg|jpeg|webp|gif)$/i.test(name)) return true;
+  return false;
+}
+
+function getLeadDocumentPreviewKind(row = null) {
+  const mime = String(row?.mimeType || "").trim().toLowerCase();
+  const url = String(row?.downloadUrl || row?.sourceUrl || "").trim().toLowerCase();
+  const name = String(row?.fileName || "").trim().toLowerCase();
+  if (mime.startsWith("image/") || /\.(png|jpg|jpeg|webp|gif)$/i.test(url) || /\.(png|jpg|jpeg|webp|gif)$/i.test(name)) {
+    return "image";
+  }
+  if (mime === "application/pdf" || url.endsWith(".pdf") || name.endsWith(".pdf")) {
+    return "pdf";
+  }
+  return "external";
+}
+
+function renderLeadDocumentChecklist(leadRow = null) {
+  const lead = leadRow || getCurrentSelectedLead();
+  const listEl = document.getElementById("leadDocumentChecklist");
+  const statusEl = document.getElementById("leadDocumentChecklistStatus");
+  if (!listEl || !statusEl) return;
+  if (!lead) {
+    statusEl.textContent = "No lead selected";
+    listEl.innerHTML = `<p class="muted">Load a synced lead to see required documents.</p>`;
+    return;
+  }
+  const items = inferLeadDocumentRequirements(lead, state.leadDocuments);
+  if (!items.length) {
+    statusEl.textContent = "Nothing required yet";
+    listEl.innerHTML = `<p class="muted">No required documents yet for this lead. Add links, ID, policy, or support docs as the case matures.</p>`;
+    return;
+  }
+  const missingCount = items.filter((item) => !item.complete).length;
+  statusEl.textContent = missingCount ? `${missingCount} missing` : "Checklist complete";
+  listEl.innerHTML = items.map((item) => `
+    <div class="lead-document-checklist-item" data-state="${item.complete ? "ready" : "missing"}">
+      <div class="detail-actions">
+        <strong>${escapeHtml(item.label)}</strong>
+        <span class="lead-document-badge" data-tone="${item.complete ? "ready" : "missing"}">${item.complete ? "Ready" : "Missing"}</span>
+      </div>
+      <div class="crm-activity-note">${escapeHtml(item.why)}</div>
+    </div>
+  `).join("");
+}
+
+function renderLeadDocumentPreview(leadRow = null) {
+  const lead = leadRow || getCurrentSelectedLead();
+  const container = document.getElementById("leadDocumentPreview");
+  const statusEl = document.getElementById("leadDocumentPreviewStatus");
+  if (!container || !statusEl) return;
+  if (!lead) {
+    statusEl.textContent = "No lead selected";
+    container.innerHTML = `<p class="muted">Load a synced lead to preview its documents.</p>`;
+    return;
+  }
+  const docs = Array.isArray(state.leadDocuments) ? state.leadDocuments : [];
+  if (!docs.length) {
+    statusEl.textContent = "No document selected";
+    container.innerHTML = `<p class="muted">Add or select a document to preview it here.</p>`;
+    return;
+  }
+  let current = docs.find((row) => String(row.documentId || "") === String(state.ui.selectedLeadDocumentId || ""));
+  if (!current) {
+    current = docs[0];
+    state.ui.selectedLeadDocumentId = String(current?.documentId || "");
+  }
+  const openUrl = String(current?.downloadUrl || current?.sourceUrl || "").trim();
+  if (!openUrl) {
+    statusEl.textContent = "Preview unavailable";
+    container.innerHTML = `<p class="muted">This document does not have an openable URL.</p>`;
+    return;
+  }
+  const previewKind = getLeadDocumentPreviewKind(current);
+  statusEl.textContent = leadDocumentCategoryLabel(current?.documentCategory);
+  if (previewKind === "image") {
+    container.innerHTML = `
+      <div class="lead-document-meta">
+        <span>${escapeHtml(String(current?.fileName || "Document"))}</span>
+        <span>${escapeHtml(formatFileSize(current?.fileSizeBytes))}</span>
+      </div>
+      <img class="lead-document-preview-image" src="${escapeHtml(openUrl)}" alt="${escapeHtml(String(current?.fileName || "Lead document"))}" />
+      <div class="detail-actions">
+        <a class="ghost-button slim" href="${escapeHtml(openUrl)}" target="_blank" rel="noopener noreferrer">Open full file</a>
+      </div>
+    `;
+    return;
+  }
+  if (previewKind === "pdf") {
+    container.innerHTML = `
+      <div class="lead-document-meta">
+        <span>${escapeHtml(String(current?.fileName || "Document"))}</span>
+        <span>${escapeHtml(formatFileSize(current?.fileSizeBytes))}</span>
+      </div>
+      <iframe class="lead-document-preview-frame" src="${escapeHtml(openUrl)}" title="${escapeHtml(String(current?.fileName || "Lead document preview"))}"></iframe>
+      <div class="detail-actions">
+        <a class="ghost-button slim" href="${escapeHtml(openUrl)}" target="_blank" rel="noopener noreferrer">Open full file</a>
+      </div>
+    `;
+    return;
+  }
+  statusEl.textContent = "External document";
+  container.innerHTML = `
+    <p class="muted">This file type opens best in a separate tab.</p>
+    <div class="lead-document-meta">
+      <span>${escapeHtml(String(current?.fileName || "Document"))}</span>
+      <span>${escapeHtml(leadDocumentCategoryLabel(current?.documentCategory))}</span>
+    </div>
+    <div class="detail-actions">
+      <a class="ghost-button slim" href="${escapeHtml(openUrl)}" target="_blank" rel="noopener noreferrer">Open document</a>
+    </div>
+  `;
+}
+
+function selectLeadDocument(documentId, leadRow = null) {
+  const docs = Array.isArray(state.leadDocuments) ? state.leadDocuments : [];
+  const id = String(documentId || "").trim();
+  if (!id) {
+    state.ui.selectedLeadDocumentId = "";
+  } else if (docs.some((row) => String(row?.documentId || "") === id)) {
+    state.ui.selectedLeadDocumentId = id;
+  } else {
+    state.ui.selectedLeadDocumentId = "";
+  }
+  renderLeadDocuments(leadRow || getCurrentSelectedLead());
+}
+
+function clearLeadDocumentInputs() {
+  const fileInput = document.getElementById("leadDocumentFile");
+  const linkInput = document.getElementById("leadDocumentLink");
+  const notesInput = document.getElementById("leadDocumentNotes");
+  const categoryInput = document.getElementById("leadDocumentCategory");
+  if (fileInput) fileInput.value = "";
+  if (linkInput) linkInput.value = "";
+  if (notesInput) notesInput.value = "";
+  if (categoryInput) categoryInput.value = "general";
+}
+
+function renderLeadDocuments(leadRow = null) {
+  const lead = leadRow || getCurrentSelectedLead();
+  const statusEl = document.getElementById("leadDocumentsStatus");
+  const listEl = document.getElementById("leadDocumentsList");
+  const uploadBtn = document.getElementById("leadDocumentUploadBtn");
+  const refreshBtn = document.getElementById("leadDocumentRefreshBtn");
+  if (!statusEl || !listEl) return;
+  const enabled = canUseLeadDocumentHub(lead);
+  if (uploadBtn instanceof HTMLButtonElement) uploadBtn.disabled = !enabled;
+  if (refreshBtn instanceof HTMLButtonElement) refreshBtn.disabled = !enabled;
+  if (!lead) {
+    state.ui.selectedLeadDocumentId = "";
+    statusEl.textContent = "No lead selected";
+    listEl.innerHTML = `<p class="muted">Load a synced lead to manage client documents.</p>`;
+    renderLeadDocumentChecklist(null);
+    renderLeadDocumentPreview(null);
+    return;
+  }
+  if (!enabled) {
+    state.ui.selectedLeadDocumentId = "";
+    statusEl.textContent = "Backend not configured";
+    listEl.innerHTML = `<p class="muted">Document hub needs the remote API to be available.</p>`;
+    renderLeadDocumentChecklist(lead);
+    renderLeadDocumentPreview(lead);
+    return;
+  }
+  const rows = Array.isArray(state.leadDocuments) ? state.leadDocuments : [];
+  const selectedId = String(state.ui.selectedLeadDocumentId || "").trim();
+  const hasSelected = rows.some((row) => String(row?.documentId || "") === selectedId);
+  if (!hasSelected) {
+    state.ui.selectedLeadDocumentId = String(rows[0]?.documentId || "");
+  }
+  statusEl.textContent = rows.length ? `${rows.length} document(s)` : "No documents yet";
+  if (!rows.length) {
+    state.ui.selectedLeadDocumentId = "";
+    listEl.innerHTML = `<p class="muted">No client documents saved for this lead yet.</p>`;
+    renderLeadDocumentChecklist(lead);
+    renderLeadDocumentPreview(lead);
+    return;
+  }
+  listEl.innerHTML = rows.map((row) => {
+    const openUrl = String(row.downloadUrl || row.sourceUrl || "").trim();
+    const isSelected = String(row.documentId || "") === String(state.ui.selectedLeadDocumentId || "");
+    const metaParts = [
+      String(row.documentCategory || "general").replaceAll("_", " "),
+      formatFileSize(row.fileSizeBytes),
+      formatDateTimeShort(row.insertedAt || row.updatedAt || ""),
+    ].filter(Boolean);
+    return `
+      <div class="lead-document-item" data-selected="${isSelected ? "true" : "false"}">
+        <div>
+          <strong>${escapeHtml(String(row.fileName || "Document"))}</strong>
+          <div class="lead-document-meta">${metaParts.map((part) => `<span>${escapeHtml(part)}</span>`).join("")}</div>
+        </div>
+        ${row.notes ? `<div class="crm-activity-note">${escapeHtml(String(row.notes || ""))}</div>` : ""}
+        <div class="detail-actions">
+          <button class="ghost-button slim" type="button" data-lead-document-select="${escapeHtml(String(row.documentId || ""))}">${isSelected ? "Previewing" : "Preview"}</button>
+          ${openUrl ? `<a class="ghost-button slim" href="${escapeHtml(openUrl)}" target="_blank" rel="noopener noreferrer">Open</a>` : ""}
+          <button class="ghost-button slim" type="button" data-lead-document-archive="${escapeHtml(String(row.documentId || ""))}">Archive</button>
+        </div>
+      </div>
+    `;
+  }).join("");
+  renderLeadDocumentChecklist(lead);
+  renderLeadDocumentPreview(lead);
+}
+
+async function refreshLeadDocumentsForLead(leadRow = null, options = {}) {
+  const lead = leadRow || getCurrentSelectedLead();
+  const silent = Boolean(options?.silent);
+  const statusEl = document.getElementById("leadDocumentsStatus");
+  if (!lead || !canUseLeadDocumentHub(lead)) {
+    state.leadDocuments = [];
+    renderLeadDocuments(lead);
+    return [];
+  }
+  if (statusEl) statusEl.textContent = "Loading...";
+  try {
+    const response = await apiFetch(`${LOCAL_DB_LEAD_BASE_URL}/${encodeURIComponent(String(lead.lead_external_id || "").trim())}/documents`, {
+      method: "GET",
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) {
+      throw new Error(String(data?.error || `Document load failed (${response.status})`));
+    }
+    state.leadDocuments = Array.isArray(data.items) ? data.items : [];
+    renderLeadDocuments(lead);
+    return state.leadDocuments;
+  } catch (error) {
+    console.error(error);
+    state.leadDocuments = [];
+    renderLeadDocuments(lead);
+    if (!silent) {
+      showPortalToast(String(error?.message || "Could not load documents."), "warning", {
+        title: "Document Hub Needs Attention",
+        duration: 5000,
+      });
+    }
+    return [];
+  }
+}
+
+async function uploadLeadDocumentForCurrentLead() {
+  const lead = getCurrentSelectedLead();
+  if (!lead?.lead_external_id) {
+    throw new Error("Load a lead before adding documents.");
+  }
+  if (!canUseLeadDocumentHub(lead)) {
+    throw new Error("Document hub is not configured yet.");
+  }
+  const category = String(document.getElementById("leadDocumentCategory")?.value || "general").trim() || "general";
+  const notes = String(document.getElementById("leadDocumentNotes")?.value || "").trim();
+  const link = String(document.getElementById("leadDocumentLink")?.value || "").trim();
+  const fileInput = document.getElementById("leadDocumentFile");
+  const file = fileInput instanceof HTMLInputElement ? fileInput.files?.[0] : null;
+  if (!file && !link) {
+    throw new Error("Add a file or paste a document link first.");
+  }
+
+  const payload = {
+    documentCategory: category,
+    notes,
+    sourceUrl: link,
+    uploadedByEmail: getPortalActorEmail(),
+  };
+  if (file) {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result || ""));
+      reader.onerror = () => reject(reader.error || new Error("Could not read file."));
+      reader.readAsDataURL(file);
+    });
+    const base64Payload = String(dataUrl || "").split(",", 2)[1] || "";
+    payload.fileName = file.name;
+    payload.mimeType = file.type;
+    payload.fileSizeBytes = file.size;
+    payload.contentBase64 = base64Payload;
+  }
+
+  const response = await apiFetch(`${LOCAL_DB_LEAD_BASE_URL}/${encodeURIComponent(String(lead.lead_external_id || "").trim())}/documents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) {
+    throw new Error(String(data?.error || `Document upload failed (${response.status})`));
+  }
+  clearLeadDocumentInputs();
+  await refreshLeadDocumentsForLead(lead, { silent: true });
+  if (Number(lead?.lead_id || 0) > 0) {
+    await appendCallDeskActivityLog({
+      leadId: Number(lead.lead_id),
+      activityType: "document_added",
+      outcome: category,
+      notes: String(data?.item?.fileName || "Client document added"),
+    }).catch((error) => console.error(error));
+    await refreshCallDeskActivityForLead(lead).catch(() => {});
+  }
+  showPortalToast(`${String(data?.item?.fileName || "Document")} added.`, "success", {
+    title: "Document Saved",
+  });
+}
+
+async function archiveLeadDocument(documentId) {
+  const id = Number(documentId || 0);
+  if (!id) throw new Error("Document id is required.");
+  const response = await apiFetch(`${LOCAL_DB_LEAD_DOCUMENT_ARCHIVE_URL}/${encodeURIComponent(String(id))}/archive`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: "{}",
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok || !data?.ok) {
+    throw new Error(String(data?.error || `Document archive failed (${response.status})`));
+  }
+  await refreshLeadDocumentsForLead(getCurrentSelectedLead(), { silent: true });
+  showPortalToast("Document archived.", "warning", { title: "Document Archived" });
+}
+
+async function loadCallDeskActivityFromSupabase(leadInternalId) {
+  const id = Number(leadInternalId || 0);
+  if (!supabase || id <= 0) return [];
+  const { data, error } = await supabase
+    .from("call_desk_activity")
+    .select("activity_id, activity_date, activity_type, outcome, owner, notes, inserted_at")
+    .eq("lead_id", id)
+    .order("activity_date", { ascending: false })
+    .limit(12);
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+async function refreshCallDeskActivityForLead(leadRow = null) {
+  const lead = leadRow || getCurrentSelectedLead();
+  if (!lead || !supabase || Number(lead?.lead_id || 0) <= 0) {
+    state.callDeskActivityEntries = [];
+    renderCallDeskActivity([]);
+    return;
+  }
+  try {
+    state.callDeskActivityEntries = await loadCallDeskActivityFromSupabase(lead.lead_id);
+  } catch (error) {
+    console.error(error);
+    state.callDeskActivityEntries = [];
+  }
+  renderCallDeskActivity(state.callDeskActivityEntries);
+  renderCommsHub(lead);
+}
+
+async function appendCallDeskActivityLog({
+  leadId,
+  activityType,
+  outcome = "",
+  notes = "",
+  channel = "portal",
+} = {}) {
+  const internalLeadId = Number(leadId || 0);
+  if (!supabase || internalLeadId <= 0) return;
+  const payload = {
+    lead_id: internalLeadId,
+    activity_date: nowIso(),
+    channel: String(channel || "portal").trim() || "portal",
+    activity_type: String(activityType || "lead_update").trim() || "lead_update",
+    outcome: String(outcome || "").trim() || null,
+    owner: getPortalActorEmail() || null,
+    notes: String(notes || "").trim() || null,
+  };
+  const { error } = await supabase.from("call_desk_activity").insert(payload);
+  if (error) throw error;
+}
+
 function attachNotesHandlers() {
   const fields = [
     "notesClientName",
@@ -5288,24 +7467,42 @@ function setContentStudioStatus(message) {
   if (el) el.textContent = String(message || "");
 }
 
-async function apiFetch(input, init = {}) {
-  try {
-    return await fetch(input, init);
-  } catch (error) {
-    const asText = String(input || "");
-    if (!asText.includes(":8787")) throw error;
-    const variants = [];
-    if (asText.includes("127.0.0.1")) variants.push(asText.replace("127.0.0.1", "localhost"));
-    if (asText.includes("localhost")) variants.push(asText.replace("localhost", "127.0.0.1"));
-    for (const candidate of variants) {
-      try {
-        return await fetch(candidate, init);
-      } catch {
-        // try next variant
-      }
+const contentButtonResetTimers = new Map();
+
+function flashContentActionButtons(buttonIds = [], pendingLabel, successLabel, idleLabel) {
+  const ids = Array.isArray(buttonIds) ? buttonIds : [buttonIds];
+  ids.forEach((id) => {
+    const button = document.getElementById(id);
+    if (!(button instanceof HTMLButtonElement)) return;
+    const original = idleLabel || button.dataset.defaultLabel || button.textContent || "";
+    if (!button.dataset.defaultLabel) button.dataset.defaultLabel = original;
+    if (contentButtonResetTimers.has(id)) {
+      clearTimeout(contentButtonResetTimers.get(id));
+      contentButtonResetTimers.delete(id);
     }
-    throw error;
-  }
+    if (pendingLabel) button.textContent = pendingLabel;
+    button.dataset.pendingLabel = pendingLabel || "";
+    button.dataset.successLabel = successLabel || "";
+  });
+}
+
+function settleContentActionButtons(buttonIds = [], { ok = true, successLabel = "", errorLabel = "" } = {}) {
+  const ids = Array.isArray(buttonIds) ? buttonIds : [buttonIds];
+  ids.forEach((id) => {
+    const button = document.getElementById(id);
+    if (!(button instanceof HTMLButtonElement)) return;
+    const original = button.dataset.defaultLabel || button.textContent || "";
+    if (contentButtonResetTimers.has(id)) {
+      clearTimeout(contentButtonResetTimers.get(id));
+      contentButtonResetTimers.delete(id);
+    }
+    button.textContent = ok ? (successLabel || button.dataset.successLabel || original) : (errorLabel || original);
+    const timer = window.setTimeout(() => {
+      button.textContent = original;
+      contentButtonResetTimers.delete(id);
+    }, ok ? 2000 : 1600);
+    contentButtonResetTimers.set(id, timer);
+  });
 }
 
 function getContentScheduleBounds() {
@@ -5430,6 +7627,26 @@ function updateCanvaDesignButtonState() {
     warning.textContent = valid ? "Link Ready" : "Insert URL to open";
     warning.dataset.state = valid ? "ready" : "missing";
     warning.title = valid ? "Canva handoff is ready." : "Insert URL to open";
+  }
+}
+
+async function apiFetch(input, init = {}) {
+  try {
+    return await fetch(input, init);
+  } catch (error) {
+    const asText = String(input || "");
+    if (!asText.includes(":8787")) throw error;
+    const variants = [];
+    if (asText.includes("127.0.0.1")) variants.push(asText.replace("127.0.0.1", "localhost"));
+    if (asText.includes("localhost")) variants.push(asText.replace("localhost", "127.0.0.1"));
+    for (const candidate of variants) {
+      try {
+        return await fetch(candidate, init);
+      } catch {
+        // try next variant
+      }
+    }
+    throw error;
   }
 }
 
@@ -5966,6 +8183,86 @@ function renderContentRequiredChecklist() {
     .join("");
 }
 
+function getActiveContentFilterState() {
+  const search = String(state.ui.contentPostSearch || "").trim();
+  const week = String(state.ui.contentPostWeekFilter || "").trim();
+  const platform = String(state.ui.contentPostPlatformFilter || "").trim();
+  const status = String(state.ui.contentPostStatusFilter || "").trim();
+  const parts = [];
+  if (search) parts.push(`Search: "${search}"`);
+  if (week) parts.push(`Week ${week}`);
+  if (platform) parts.push(`Platform: ${platform}`);
+  if (status) parts.push(`Status: ${status}`);
+  return {
+    search,
+    week,
+    platform,
+    status,
+    parts,
+    hasAny: parts.length > 0,
+  };
+}
+
+function syncContentFilterInputs() {
+  const bindings = {
+    contentPostSearch: state.ui.contentPostSearch || "",
+    contentPostWeekFilter: state.ui.contentPostWeekFilter || "",
+    contentPostPlatformFilter: state.ui.contentPostPlatformFilter || "",
+    contentPostStatusFilter: state.ui.contentPostStatusFilter || "",
+  };
+  Object.entries(bindings).forEach(([id, value]) => {
+    const el = document.getElementById(id);
+    if (el) el.value = String(value);
+  });
+}
+
+function renderContentFilterSummary() {
+  const wrap = document.getElementById("contentFilterSummary");
+  const text = document.getElementById("contentFilterSummaryText");
+  const clearBtn = document.getElementById("contentClearFiltersBtn");
+  if (!wrap || !text || !clearBtn) return;
+  const filters = getActiveContentFilterState();
+  const filteredCount = getFilteredContentPosts().length;
+  if (!filters.hasAny) {
+    wrap.hidden = true;
+    text.textContent = "";
+    clearBtn.disabled = true;
+    return;
+  }
+  wrap.hidden = false;
+  clearBtn.disabled = false;
+  const filterSummary = filters.parts.join(" • ");
+  text.textContent = filteredCount
+    ? `${filterSummary}. Showing ${filteredCount} matching post${filteredCount === 1 ? "" : "s"}.`
+    : `${filterSummary}. No posts match right now. Clear filters to see the full studio.`;
+}
+
+function clearContentFilters({ preserveStatus = false, reason = "" } = {}) {
+  state.ui.contentPostSearch = "";
+  state.ui.contentPostWeekFilter = "";
+  state.ui.contentPostPlatformFilter = "";
+  state.ui.contentPostStatusFilter = "";
+  state.ui.contentFiltersTouched = false;
+  syncContentFilterInputs();
+  renderContentPostTable();
+  if (!preserveStatus) {
+    setContentStudioStatus(reason || "Content Studio filters cleared.");
+  }
+}
+
+function autoClearHiddenContentFilters() {
+  const filters = getActiveContentFilterState();
+  if (!state.contentPosts.length || !filters.hasAny) return false;
+  if (state.ui.contentFiltersTouched) return false;
+  if (getFilteredContentPosts().length) return false;
+  clearContentFilters({
+    preserveStatus: true,
+    reason: "",
+  });
+  setContentStudioStatus(`Loaded ${state.contentPosts.length} posts. Cleared stale filters from the previous session.`);
+  return true;
+}
+
 function getFilteredContentPosts() {
   const search = String(state.ui.contentPostSearch || "").trim().toLowerCase();
   const weekFilter = String(state.ui.contentPostWeekFilter || "").trim();
@@ -5997,14 +8294,19 @@ function populateContentQuickPick() {
   const posts = getFilteredContentPosts();
   const selectedId = String(state.ui.selectedContentPostId || "");
   if (!posts.length) {
-    select.innerHTML = '<option value="">No posts available. Refresh or import buffer-import.json.</option>';
+    const filters = getActiveContentFilterState();
+    const message = filters.hasAny
+      ? "No posts match the active filters. Clear filters to see the full list."
+      : "No posts available. Refresh or import JSON.";
+    select.innerHTML = `<option value="">${escapeHtml(message)}</option>`;
     select.value = "";
     return;
   }
   select.innerHTML = posts
     .map((post) => {
       const label = [
-        `${post.post_id || `#${post.id}`} (#${post.id})`,
+        `#${post.id}`,
+        post.post_id || "",
         post.post_date || "-",
         (post.platforms || []).join(","),
         post.status || "draft",
@@ -6361,11 +8663,15 @@ function renderContentPostTable() {
   const selectAll = document.getElementById("contentSelectAll");
   if (!tbody) return;
   const filteredPosts = getFilteredContentPosts();
+  const filters = getActiveContentFilterState();
   populateContentQuickPick();
+  renderContentFilterSummary();
   renderContentPillarDistribution(filteredPosts);
   if (!filteredPosts.length) {
     const emptyMessage = state.contentPosts.length
-      ? "No posts match the current filters. Clear search or switch week, platform, or status."
+      ? (filters.hasAny
+          ? `No posts match the current filters: ${filters.parts.join(" • ")}.`
+          : "No posts match the current filters. Clear search or switch week, platform, or status.")
       : "No content posts loaded yet. Import a JSON plan or create shared posts in Supabase to begin.";
     tbody.innerHTML = `<tr><td colspan="7" class="muted">${escapeHtml(emptyMessage)}</td></tr>`;
     if (selectAll) selectAll.checked = false;
@@ -6606,6 +8912,7 @@ async function loadContentStudioData(statusMessage = "") {
     jobsError = String(error.message || error);
     state.contentPublishJobs = [];
   }
+  const autoClearedStaleFilters = autoClearHiddenContentFilters();
   renderContentPostTable();
   renderContentEditor();
   renderContentPublishJobs();
@@ -6625,6 +8932,9 @@ async function loadContentStudioData(statusMessage = "") {
   }
   if (jobsError) {
     setContentStudioStatus(`Loaded ${state.contentPosts.length} posts (jobs unavailable: ${jobsError})`);
+    return;
+  }
+  if (autoClearedStaleFilters) {
     return;
   }
   if (statusMessage) {
@@ -6859,6 +9169,10 @@ async function runBulkContentAction(action) {
     }
   }
   await loadContentStudioData(`Bulk ${actionLabel} complete. Success: ${success}, Failed: ${failed}.`);
+  showPortalToast(`Bulk ${actionLabel} complete. Success: ${success}, Failed: ${failed}.`, failed ? "warning" : "success", {
+    title: "Bulk Content Update",
+    duration: failed ? 5000 : 3500,
+  });
 }
 
 async function restoreContentRevision(revisionId) {
@@ -6893,8 +9207,10 @@ async function restoreContentRevision(revisionId) {
     if (updateError) throw updateError;
     await insertContentRevision(post.id, createContentRevisionSnapshot(post), `Restored revision ${revision.revision_number || revision.id}`);
     await loadContentStudioData("Revision restored.");
+    showPortalToast("Revision restored.", "success", { title: "Revision Restored" });
   } catch (error) {
     setContentStudioStatus(String(error.message || error));
+    showPortalToast(String(error.message || error), "error", { title: "Revision Restore Failed", duration: 5000 });
   }
 }
 
@@ -6907,7 +9223,63 @@ async function runContentPublish() {
     setContentStudioStatus("Only admins can publish posts.");
     return;
   }
-  setContentStudioStatus("Remote publish backend is not configured yet. Content editing, approvals, schedules, and job history are live; Buffer publishing still needs a hosted worker.");
+  if (!LOCAL_DB_CONTENT_PUBLISH_RUN_URL) {
+    setContentStudioStatus("Publish API URL is missing from this portal build.");
+    return;
+  }
+  const selectedIds = Array.from(
+    new Set((state.ui.contentSelectedPostIds || []).map((id) => Number(id)).filter((id) => Number.isFinite(id) && id > 0)),
+  );
+  const selectedPost = getSelectedContentPost();
+  const targetIds = selectedIds.length
+    ? selectedIds
+    : Number(selectedPost?.id || 0) > 0
+      ? [Number(selectedPost.id)]
+      : [];
+  if (!targetIds.length) {
+    setContentStudioStatus("Select a post first, or check one or more rows to publish.");
+    return;
+  }
+  const publishButtonIds = ["contentRunPublishBtn", "contentRunPublishTopBtn", "contentStepPublishBtn"];
+  flashContentActionButtons(publishButtonIds, "Checking...", "✔ Published");
+  setContentStudioStatus(`Sending ${targetIds.length} post${targetIds.length === 1 ? "" : "s"} to Buffer...`);
+  try {
+    const response = await apiFetch(LOCAL_DB_CONTENT_PUBLISH_RUN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        postIds: targetIds,
+        limit: targetIds.length,
+      }),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) {
+      throw new Error(String(data?.error || `Publish failed (${response.status})`));
+    }
+    const results = Array.isArray(data.results) ? data.results : [];
+    const published = results.filter((item) => String(item?.status || "") === "published");
+    const failed = results.filter((item) => String(item?.status || "") === "failed");
+    const skipped = results.filter((item) => String(item?.status || "").startsWith("skipped"));
+    const summary = [
+      published.length ? `${published.length} published` : "",
+      failed.length ? `${failed.length} failed` : "",
+      skipped.length ? `${skipped.length} skipped` : "",
+    ].filter(Boolean).join(", ") || "No publishable posts found.";
+    await loadContentStudioData(`Publish run complete: ${summary}`);
+    settleContentActionButtons(publishButtonIds, {
+      ok: failed.length === 0,
+      successLabel: published.length ? "✔ Published" : "Checked",
+      errorLabel: failed.length ? "Needs Review" : "Checked",
+    });
+    showPortalToast(summary, failed.length ? "warning" : "success", {
+      title: failed.length ? "Publish Needs Attention" : "Publish Complete",
+      duration: failed.length || skipped.length ? 5000 : 3500,
+    });
+  } catch (error) {
+    settleContentActionButtons(publishButtonIds, { ok: false, errorLabel: "Try Again" });
+    setContentStudioStatus(String(error.message || error));
+    showPortalToast(String(error.message || error), "error", { title: "Publish Failed", duration: 5000 });
+  }
 }
 
 async function importContentFromJsonFile(file) {
@@ -7142,7 +9514,7 @@ function attachContentStudioHandlers() {
     if (!el) return;
     el.addEventListener("input", () => {
       if (id === "contentEditScheduledFor") {
-        validateContentScheduleInput({ silent: true });
+        validateContentScheduleInput();
         const postId = String(state.ui.selectedContentPostId || "").trim();
         if (postId) {
           setContentDraftOverride(postId, { scheduled_for: String(el.value || "").trim() });
@@ -7158,7 +9530,7 @@ function attachContentStudioHandlers() {
     });
     el.addEventListener("change", () => {
       if (id === "contentEditScheduledFor") {
-        validateContentScheduleInput({ report: true, autocorrect: true });
+        validateContentScheduleInput({ report: true });
         const postId = String(state.ui.selectedContentPostId || "").trim();
         if (postId) {
           setContentDraftOverride(postId, { scheduled_for: String(el.value || "").trim() });
@@ -7227,10 +9599,14 @@ function attachContentStudioHandlers() {
     if (!el) return;
     const handler = () => {
       state.ui[id] = String(el.value || "");
+      state.ui.contentFiltersTouched = true;
       renderContentPostTable();
     };
     el.addEventListener("input", handler);
     el.addEventListener("change", handler);
+  });
+  document.getElementById("contentClearFiltersBtn")?.addEventListener("click", () => {
+    clearContentFilters({ reason: "Content Studio filters cleared." });
   });
   document.getElementById("contentPostTable")?.addEventListener("click", (event) => {
     const target = event.target;
@@ -7239,16 +9615,6 @@ function attachContentStudioHandlers() {
     if (restoreBtn) {
       const revisionId = restoreBtn.getAttribute("data-content-restore") || "";
       restoreContentRevision(revisionId).catch(() => {});
-      return;
-    }
-    const check = target.closest("[data-content-check]");
-    if (check) {
-      const postId = String(check.getAttribute("data-content-check") || "");
-      const selected = new Set((state.ui.contentSelectedPostIds || []).map((id) => String(id)));
-      if (check.checked) selected.add(postId);
-      else selected.delete(postId);
-      state.ui.contentSelectedPostIds = Array.from(selected);
-      renderContentPostTable();
       return;
     }
     const editButton = target.closest("[data-content-edit]");
@@ -7277,6 +9643,18 @@ function attachContentStudioHandlers() {
       console.error("Content post selection failed:", error);
       setContentStudioStatus(`Selection issue: ${String(error.message || error)}`);
     }
+  });
+  document.getElementById("contentPostTable")?.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof Element)) return;
+    const check = target.closest("[data-content-check]");
+    if (!check) return;
+    const postId = String(check.getAttribute("data-content-check") || "");
+    const selected = new Set((state.ui.contentSelectedPostIds || []).map((id) => String(id)));
+    if (check.checked) selected.add(postId);
+    else selected.delete(postId);
+    state.ui.contentSelectedPostIds = Array.from(selected);
+    renderContentPostTable();
   });
   document.getElementById("contentQuickPick")?.addEventListener("change", (event) => {
     const value = Number.parseInt(String(event.target?.value || "").trim(), 10);
@@ -7616,8 +9994,12 @@ function applySavedPayloadToLeadState(payload) {
   lead.carrier_match = String(payload.carrierMatch || lead.carrier_match || "").trim();
   lead.confidence = String(payload.confidence || lead.confidence || "").trim();
   lead.pipeline_status = String(payload.pipelineStatus || lead.pipeline_status || "").trim().toLowerCase();
-  lead.calendar_event_id = String(payload.calendarEventId || lead.calendar_event_id || "").trim();
-  lead.next_appointment_time = String(payload.nextAppointmentTime || lead.next_appointment_time || "").trim();
+  if (Object.prototype.hasOwnProperty.call(payload, "calendarEventId")) {
+    lead.calendar_event_id = String(payload.calendarEventId || "").trim();
+  }
+  if (Object.prototype.hasOwnProperty.call(payload, "nextAppointmentTime")) {
+    lead.next_appointment_time = String(payload.nextAppointmentTime || "").trim();
+  }
   lead.raw_tags = String(payload.tags || lead.raw_tags || "").trim();
   lead.notes = String(payload.notes || lead.notes || "").trim();
   lead.last_activity_at_source = new Date().toISOString();
@@ -7857,6 +10239,74 @@ function renderPipelineBoard() {
       })
       .join("");
   });
+  renderPipelineOps();
+}
+
+function getPipelineStageAgeDays(lead = {}) {
+  const raw = String(lead?.last_activity_at_source || lead?.inserted_at || lead?.created_at_source || "").trim();
+  const ts = Date.parse(raw);
+  if (!Number.isFinite(ts)) return 0;
+  return Math.max(0, Math.floor((Date.now() - ts) / (24 * 60 * 60 * 1000)));
+}
+
+function renderPipelineOps() {
+  const summaryEl = document.getElementById("pipelineOpsSummary");
+  const stalledEl = document.getElementById("pipelineOpsStalledCount");
+  const underwritingEl = document.getElementById("pipelineOpsUnderwritingCount");
+  const approvedEl = document.getElementById("pipelineOpsApprovedCount");
+  const issuedEl = document.getElementById("pipelineOpsIssuedCount");
+  const table = document.getElementById("pipelineOpsTable");
+  if (!summaryEl || !table) return;
+
+  const stageSlaDays = {
+    app_submitted: 2,
+    underwriting: 5,
+    approved: 2,
+    issued: 3,
+    paid: 0,
+  };
+  const rows = state.leads
+    .filter((lead) => PIPELINE_STAGES.includes(String(lead?.pipeline_status || "").trim()))
+    .map((lead) => {
+      const stage = String(lead?.pipeline_status || "").trim();
+      const ageDays = getPipelineStageAgeDays(lead);
+      const slaDays = Number(stageSlaDays[stage] || 0);
+      return {
+        lead,
+        stage,
+        ageDays,
+        slaDays,
+        stalled: slaDays > 0 && ageDays > slaDays,
+      };
+    });
+
+  const stalledRows = rows.filter((row) => row.stalled).sort((a, b) => b.ageDays - a.ageDays);
+  const underwritingCount = rows.filter((row) => row.stage === "underwriting" && row.stalled).length;
+  const approvedCount = rows.filter((row) => row.stage === "approved" && row.stalled).length;
+  const issuedCount = rows.filter((row) => row.stage === "issued" && row.stalled).length;
+
+  if (stalledEl) stalledEl.textContent = String(stalledRows.length);
+  if (underwritingEl) underwritingEl.textContent = String(underwritingCount);
+  if (approvedEl) approvedEl.textContent = String(approvedCount);
+  if (issuedEl) issuedEl.textContent = String(issuedCount);
+  summaryEl.textContent = stalledRows.length
+    ? `${stalledRows.length} stalled lead(s) need movement`
+    : "Pipeline is within current SLA targets.";
+
+  if (!stalledRows.length) {
+    table.innerHTML = `<tr><td colspan="5" class="muted">No stalled pipeline leads right now.</td></tr>`;
+    return;
+  }
+
+  table.innerHTML = stalledRows.slice(0, 20).map((row) => `
+    <tr>
+      <td>${escapeHtml(getLeadDisplayName(row.lead))}</td>
+      <td>${escapeHtml(pipelineStageLabel(row.stage))}</td>
+      <td>${escapeHtml(`${row.ageDays}d (SLA ${row.slaDays}d)`)}</td>
+      <td>${escapeHtml(String(row.lead?.recommended_next_action || "Review stage blocker and move forward."))}</td>
+      <td><button class="ghost-button slim" type="button" data-pipeline-ops-load="${escapeHtml(String(row.lead?.lead_external_id || ""))}">Load Lead</button></td>
+    </tr>
+  `).join("");
 }
 
 function toTitleCase(value) {
@@ -8101,11 +10551,16 @@ async function saveLeadData() {
     tags: tagsString,
     notes: currentNotes,
   };
+  const originalDraftLeadId = String(payload.contactId || "").trim();
+  const originalPhone = String(lead.phone || "").trim();
+  const originalEmail = String(lead.email || "").trim();
+  let savedLead = null;
   setSaveStatus("saving");
   state.ui.isSaving = true;
   try {
     const shouldSchedule = syncViaGog && ["callback", "follow_up"].includes(currentDisposition);
     let portalScheduleWarning = "";
+    let googleCalendarWarning = "";
     if (supabase) {
       const saveResult = await saveCallDeskLeadToSupabase(payload, {
         clientName,
@@ -8114,19 +10569,45 @@ async function saveLeadData() {
         followUpAt,
         shouldSchedule,
       });
-      const savedLead = saveResult?.lead || null;
+      savedLead = saveResult?.lead || null;
       if (savedLead?.lead_external_id) {
         payload.contactId = String(savedLead.lead_external_id || payload.contactId).trim();
         payload.nextAppointmentTime = String(savedLead.next_appointment_time || payload.nextAppointmentTime || "").trim();
         payload.calendarEventId = String(saveResult?.calendarEventId || payload.calendarEventId || "").trim();
         upsertLeadIntoState(savedLead);
+        removeCreatedLeadByExternalId(originalDraftLeadId);
         removeCreatedLeadByExternalId(payload.contactId);
+        removeCreatedLeadDraftsForMatch({
+          leadExternalId: payload.contactId,
+          phone: originalPhone || savedLead.mobile_phone || "",
+          email: originalEmail || savedLead.email || "",
+        });
         state.ui.selectedCallDeskLeadId = payload.contactId;
         state.ui.leadId = payload.contactId;
         state.ui.selectedLeadSelectionId = payload.contactId;
       }
       if (!saveResult?.scheduledInternally && shouldSchedule) {
         portalScheduleWarning = "Follow-up was saved, but the portal appointment was not created.";
+      }
+      if (shouldSchedule && !portalScheduleWarning && GOOGLE_CALENDAR_SYNC_ENABLED) {
+        try {
+          const googleResult = await createGoogleCalendarEvent({
+            clientName,
+            email: lead.email || "",
+            phone: lead.phone || "",
+            scheduledAt: payload.nextAppointmentTime || followUpAt,
+            description: `${currentDisposition === "callback" ? "Callback" : "Follow-up"} scheduled from Call Desk`,
+            existingEventId: String(savedLead?.calendar_event_id || payload.calendarEventId || "").trim(),
+          });
+          payload.calendarEventId = String(
+            googleResult?.calendarEventId || googleResult?.eventId || payload.calendarEventId || "",
+          ).trim();
+          if (payload.calendarEventId) {
+            await updateLeadCalendarEventIdInSupabase(payload.contactId, payload.calendarEventId);
+          }
+        } catch (googleError) {
+          googleCalendarWarning = String(googleError?.message || "Google Calendar sync failed.");
+        }
       }
     } else if (shouldSchedule) {
       if (!followUpAt) {
@@ -8188,6 +10669,18 @@ async function saveLeadData() {
       }
     }
     applySavedPayloadToLeadState(payload);
+    if (savedLead?.lead_id) {
+      const scheduleLabel = shouldSchedule && payload.nextAppointmentTime
+        ? `Follow-up scheduled for ${formatDateTimeShort(payload.nextAppointmentTime)}.`
+        : "Lead saved from Call Desk.";
+      await appendCallDeskActivityLog({
+        leadId: savedLead.lead_id,
+        activityType: shouldSchedule ? "follow_up_saved" : "lead_saved",
+        outcome: currentDisposition || "working",
+        notes: [scheduleLabel, currentNotes].filter(Boolean).join(" "),
+      }).catch((activityError) => console.error(activityError));
+      await refreshCallDeskActivityForLead(savedLead).catch(() => {});
+    }
     if (shouldSchedule && payload.nextAppointmentTime) {
       upsertLocalCalendarEvent({
         summary: `${currentDisposition === "callback" ? "Callback" : "Follow-up"}: ${clientName || "Lead"}`,
@@ -8199,27 +10692,46 @@ async function saveLeadData() {
         attendees: payload.email ? [{ email: payload.email }] : [],
       });
       renderCalendarTab();
+    } else {
+      removeLocalCalendarEventsForLead(payload.contactId);
+      renderCalendarTab();
     }
+    await refreshLeadDocumentsForLead(getCurrentSelectedLead(), { silent: true }).catch(() => {});
     // With no-cors, response is opaque; if no error is thrown, treat as success.
     let successButtonLabel = "Saved to CRM ✅";
     if (statusEl) {
       if (shouldSchedule && portalScheduleWarning) {
         statusEl.textContent = `Saved to CRM. Portal scheduling failed: ${portalScheduleWarning}`;
         successButtonLabel = "Saved - portal scheduling failed";
+        showPortalToast(portalScheduleWarning, "warning", { title: "Portal Scheduling Needs Attention", duration: 5000 });
         window.setTimeout(() => {
           window.alert(`Portal scheduling failed:\n\n${portalScheduleWarning}`);
         }, 0);
+      } else if (shouldSchedule && googleCalendarWarning) {
+        statusEl.textContent = `Saved and scheduled in portal. Google Calendar needs attention: ${googleCalendarWarning}`;
+        successButtonLabel = "Saved - Google Calendar needs attention";
+        showPortalToast(googleCalendarWarning, "warning", { title: "Google Calendar Needs Attention", duration: 5000 });
+        window.setTimeout(() => {
+          window.alert(`Google Calendar needs attention:\n\n${googleCalendarWarning}`);
+        }, 0);
       } else {
         statusEl.textContent = shouldSchedule && supabase
-          ? "Saved and scheduled in portal."
+          ? (GOOGLE_CALENDAR_SYNC_ENABLED ? "Saved and scheduled in portal + Google Calendar." : "Saved and scheduled in portal.")
           : "Data synced successfully.";
         successButtonLabel = shouldSchedule && supabase
-          ? "Saved and scheduled ✅"
+          ? (GOOGLE_CALENDAR_SYNC_ENABLED ? "Saved and synced to Google ✅" : "Saved and scheduled ✅")
           : "Saved to CRM ✅";
+        showPortalToast(
+          shouldSchedule
+            ? (GOOGLE_CALENDAR_SYNC_ENABLED ? "Lead, portal follow-up, and Google Calendar were updated." : "Lead and portal follow-up were updated.")
+            : "Lead details were saved successfully.",
+          "success",
+          { title: shouldSchedule ? "Follow-up Saved" : "Lead Saved" },
+        );
       }
     }
     setSaveStatus("success", successButtonLabel);
-    if (shouldSchedule && supabase) {
+    if (supabase) {
       refreshTodaysAppointments().catch(() => {});
       refreshCalendarTabData().catch(() => {});
     }
@@ -8236,6 +10748,7 @@ async function saveLeadData() {
     console.error("Save failed:", error);
     if (statusEl) statusEl.textContent = String(error?.message || "Sync failed. Try again.");
     setSaveStatus("error");
+    showPortalToast(String(error?.message || "Sync failed. Try again."), "error", { title: "Save Failed", duration: 5000 });
     window.setTimeout(() => {
       if (state.ui.saveStatus === "error") setSaveStatus("idle");
     }, 3000);
@@ -8321,8 +10834,14 @@ function loadLeadIntoCallDesk(leadId) {
 
   markLeadAsOpened(leadId).catch(() => {});
   renderLeadSelectionTable();
-  document.getElementById("callDeskStatus").textContent = restored ? "Lead loaded (session restored)" : "Lead loaded";
-  setDeskLeadPickerStatus(`Loaded ${getLeadDisplayName(lead)}.`);
+  document.getElementById("callDeskStatus").textContent = restored ? "Ready (restored session)" : "Ready for update";
+  setDeskLeadPickerStatus(`Current lead: ${getLeadDisplayName(lead)}`);
+  updateCallDeskArchiveButton();
+  renderLead360(lead);
+  renderCommsHub(lead);
+  renderLeadDocuments(lead);
+  refreshLeadDocumentsForLead(lead, { silent: true }).catch(() => {});
+  refreshCallDeskActivityForLead(lead).catch(() => {});
 }
 
 function createLeadFromCallDesk() {
@@ -8341,8 +10860,8 @@ function createLeadFromCallDesk() {
   const existingLead = findExistingLeadMatch({ phone });
   if (existingLead?.lead_external_id) {
     loadLeadIntoCallDesk(String(existingLead.lead_external_id || ""));
-    document.getElementById("callDeskStatus").textContent = "Existing lead loaded";
-    setDeskLeadPickerStatus(`Loaded existing lead for ${getLeadDisplayName(existingLead)}.`);
+    document.getElementById("callDeskStatus").textContent = "Matched existing CRM lead";
+    setDeskLeadPickerStatus(`Current lead: ${getLeadDisplayName(existingLead)} (matched existing record)`);
     return;
   }
 
@@ -8415,8 +10934,15 @@ function createLeadFromCallDesk() {
     carrierDocs: state.carrierDocs,
   });
 
-  document.getElementById("callDeskStatus").textContent = "New lead started";
-  setDeskLeadPickerStatus(`Created ${newLead.full_name} in call desk queue.`);
+  document.getElementById("callDeskStatus").textContent = "New lead draft started";
+  setDeskLeadPickerStatus(`Current lead: ${newLead.full_name} (new draft)`);
+  updateCallDeskArchiveButton();
+  renderCallDeskActivity([]);
+  renderLead360(newLead);
+  renderCommsHub(newLead);
+  state.leadDocuments = [];
+  clearLeadDocumentInputs();
+  renderLeadDocuments(newLead);
 }
 
 function attachCallDeskHandlers() {
@@ -8433,6 +10959,77 @@ function attachCallDeskHandlers() {
     state.ui.leadId = null;
     state.ui.currentLeadEmail = "";
     startNextLeadFromQueue();
+  });
+
+  document.getElementById("deskNextPriorityBtn")?.addEventListener("click", () => {
+    startNextPriorityLead();
+  });
+
+  [
+    ["deskDialBtn", "call"],
+    ["deskTextBtn", "text"],
+    ["deskEmailBtn", "email"],
+    ["commsDialBtn", "call"],
+    ["commsTextBtn", "text"],
+    ["commsEmailBtn", "email"],
+    ["commsCopyBtn", "copy"],
+  ].forEach(([id, kind]) => {
+    document.getElementById(id)?.addEventListener("click", () => {
+      try {
+        openContactChannel(kind);
+      } catch (error) {
+        showPortalToast(String(error?.message || error), "warning", {
+          title: "Contact Action",
+          duration: 4200,
+        });
+      }
+    });
+  });
+
+  document.getElementById("lead360LoadCalendarBtn")?.addEventListener("click", () => {
+    setActiveTab("calendar");
+  });
+
+  document.getElementById("lead360OpenPipelineBtn")?.addEventListener("click", () => {
+    setActiveTab("pipeline");
+  });
+
+  document.getElementById("leadDocumentRefreshBtn")?.addEventListener("click", () => {
+    refreshLeadDocumentsForLead(getCurrentSelectedLead()).catch((error) => {
+      showPortalToast(String(error?.message || error), "warning", {
+        title: "Document Hub",
+        duration: 5000,
+      });
+    });
+  });
+
+  document.getElementById("leadDocumentUploadBtn")?.addEventListener("click", async () => {
+    try {
+      await uploadLeadDocumentForCurrentLead();
+    } catch (error) {
+      showPortalToast(String(error?.message || error), "error", {
+        title: "Document Upload Failed",
+        duration: 5000,
+      });
+    }
+  });
+
+  document.getElementById("leadDocumentsList")?.addEventListener("click", async (event) => {
+    const selectBtn = event.target.closest("[data-lead-document-select]");
+    if (selectBtn instanceof HTMLElement) {
+      selectLeadDocument(selectBtn.getAttribute("data-lead-document-select"), getCurrentSelectedLead());
+      return;
+    }
+    const archiveBtn = event.target.closest("[data-lead-document-archive]");
+    if (!(archiveBtn instanceof HTMLElement)) return;
+    try {
+      await archiveLeadDocument(archiveBtn.getAttribute("data-lead-document-archive"));
+    } catch (error) {
+      showPortalToast(String(error?.message || error), "error", {
+        title: "Document Archive Failed",
+        duration: 5000,
+      });
+    }
   });
 
   document.getElementById("deskNeedArea")?.addEventListener("change", (event) => {
@@ -8609,6 +11206,17 @@ function attachCallDeskHandlers() {
     document.getElementById("callDeskStatus").textContent = "Copied";
   });
 
+  document.getElementById("deskArchiveLeadBtn")?.addEventListener("click", () => {
+    archiveCurrentLead().catch((error) => {
+      console.error(error);
+      document.getElementById("callDeskStatus").textContent = String(error?.message || "Could not archive lead.");
+      showPortalToast(String(error?.message || "Could not archive lead."), "error", {
+        title: "Archive Failed",
+        duration: 5000,
+      });
+    });
+  });
+
   document.getElementById("deskClearBtn")?.addEventListener("click", () => {
     [
       "deskClientName",
@@ -8644,6 +11252,7 @@ function attachCallDeskHandlers() {
     document.getElementById("callDeskStatus").textContent = "Cleared";
     updateSaveButtonAvailability();
     persistActiveSession();
+    updateCallDeskArchiveButton();
   });
 
   document.getElementById("deskSaveToNotesBtn")?.addEventListener("click", async () => {
@@ -8710,6 +11319,7 @@ function attachCallDeskHandlers() {
 
   updateSaveButtonAvailability();
   updateSyncToggleUi();
+  updateCallDeskArchiveButton();
 }
 
 function saveCriteria() {
@@ -8754,12 +11364,13 @@ function attachCriteriaHandlers() {
 function renderDashboard(data) {
   const { leads, activity, bookings, sales, targets, sourcedLeads, carrierDocs } = data;
   const cleanedLeads = sanitizeLeadRows(leads).rows;
-  const prunedCreatedLeads = pruneCreatedLeadsAgainstSyncedLeads(state.createdLeads, cleanedLeads);
+  const visibleLeads = cleanedLeads.filter((lead) => !isOperationallyArchivedLead(lead));
+  const prunedCreatedLeads = pruneCreatedLeadsAgainstSyncedLeads(state.createdLeads, visibleLeads);
   if (prunedCreatedLeads.length !== state.createdLeads.length) {
     state.createdLeads = prunedCreatedLeads;
     saveCreatedLeads();
   }
-  const mergedLeads = mergeLeadsWithDrafts(cleanedLeads, prunedCreatedLeads);
+  const mergedLeads = mergeLeadsWithDrafts(visibleLeads, prunedCreatedLeads);
   state.leads = mergedLeads;
   state.activity = activity;
   state.bookings = bookings;
@@ -8814,8 +11425,12 @@ function renderDashboard(data) {
   const sourcedPresetLabel = document.getElementById("sourcedPresetLabel");
   if (sourcedPresetLabel) sourcedPresetLabel.textContent = `Preset: ${state.ui.sourcedPreset.replaceAll("_", " ")}`;
   syncMainCallQueue();
+  renderTodayMode();
+  renderManagerBriefing();
   renderWorkflowAdvisor();
   renderCarrierSettingsRows();
+  renderDuplicateCleanupTools();
+  renderPipelineOps();
 
   window.dashboardSummary = summary;
 }
@@ -8895,6 +11510,9 @@ async function initialize() {
     renderUploadPreview([]);
     setImportButtonsState(false, false);
     renderDashboard({ leads: cleanedLeads, activity, bookings, sales, targets, sourcedLeads, carrierDocs });
+    await refreshHealthCheckTools({ logAudit: false, toast: false, status: false }).catch(() => {});
+    await refreshArchivedLeadTools().catch(() => {});
+    await refreshCleanupAuditLog().catch(() => {});
     await loadCarrierConfigs();
   } catch (error) {
     document.getElementById("datasetStatus").textContent = String(error.message || error);
@@ -9156,6 +11774,40 @@ document.getElementById("calendarTabPanel")?.addEventListener("click", (event) =
   }
 });
 
+document.getElementById("todayModeTable")?.addEventListener("click", (event) => {
+  const loadBtn = event.target.closest("[data-today-mode-load]");
+  if (!loadBtn) return;
+  const leadId = String(loadBtn.dataset.todayModeLoad || "").trim();
+  if (!leadId) return;
+  openTodayModeLead(leadId);
+});
+
+document.getElementById("todayModeStartNextBtn")?.addEventListener("click", () => {
+  startNextPriorityLead();
+});
+
+document.getElementById("todayModeOpenCalendarBtn")?.addEventListener("click", () => {
+  setActiveTab("calendar");
+});
+
+document.getElementById("managerBriefingTable")?.addEventListener("click", (event) => {
+  const actionCell = event.target.closest("[data-briefing-action]");
+  if (!actionCell) return;
+  const action = String(actionCell.dataset.briefingAction || "").trim();
+  if (action === "calendar") setActiveTab("calendar");
+  if (action === "today") setActiveTab("dashboard");
+  if (action === "pipeline") setActiveTab("pipeline");
+  if (action === "campaign") setActiveTab("campaign");
+});
+
+document.getElementById("pipelineOpsTable")?.addEventListener("click", (event) => {
+  const loadBtn = event.target.closest("[data-pipeline-ops-load]");
+  if (!loadBtn) return;
+  const leadId = String(loadBtn.dataset.pipelineOpsLoad || "").trim();
+  if (!leadId) return;
+  openTodayModeLead(leadId);
+});
+
 document.getElementById("campaignSelectVisibleBtn")?.addEventListener("click", () => {
   state.ui.campaignSelectedLeadIds = getCampaignFilteredLeads()
     .slice(0, LEAD_SELECTION_MAX_ROWS)
@@ -9220,6 +11872,72 @@ document.getElementById("campaignExportCsvBtn")?.addEventListener("click", () =>
 
 document.getElementById("clearTestDataBtn")?.addEventListener("click", () => {
   clearTestData().catch(() => {});
+});
+
+document.getElementById("runHealthCheckBtn")?.addEventListener("click", () => {
+  refreshHealthCheckTools({ logAudit: true, toast: true, status: true }).catch((error) => {
+    console.error(error);
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = "Health check failed.";
+  });
+});
+
+document.getElementById("scanDuplicateGroupsBtn")?.addEventListener("click", () => {
+  renderDuplicateCleanupTools();
+  const statusEl = document.getElementById("purgeStatus");
+  if (statusEl) statusEl.textContent = "Duplicate scan refreshed.";
+});
+
+document.getElementById("refreshArchivedLeadsBtn")?.addEventListener("click", () => {
+  refreshArchivedLeadTools().catch((error) => {
+    console.error(error);
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = "Could not refresh archived leads.";
+  });
+});
+
+document.getElementById("clearStaleFollowUpsBtn")?.addEventListener("click", () => {
+  clearStaleFollowUps().catch((error) => {
+    console.error(error);
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = "Could not clear stale follow-ups.";
+  });
+});
+
+document.getElementById("duplicateCleanupTable")?.addEventListener("click", (event) => {
+  const archiveBtn = event.target.closest("[data-archive-duplicate-group]");
+  if (!archiveBtn) return;
+  const index = Number(archiveBtn.dataset.archiveDuplicateGroup || -1);
+  if (!Number.isFinite(index) || index < 0) return;
+  archiveDuplicateCluster(index).catch((error) => {
+    console.error(error);
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = "Could not archive duplicate leads.";
+  });
+});
+
+document.getElementById("cleanupAuditTable")?.addEventListener("click", (event) => {
+  const undoBtn = event.target.closest("[data-undo-duplicate-archive]");
+  if (!undoBtn) return;
+  const logId = Number(undoBtn.dataset.undoDuplicateArchive || 0);
+  if (!Number.isFinite(logId) || logId <= 0) return;
+  undoDuplicateArchive(logId).catch((error) => {
+    console.error(error);
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = "Could not undo archive.";
+  });
+});
+
+document.getElementById("archivedLeadsTable")?.addEventListener("click", (event) => {
+  const restoreBtn = event.target.closest("[data-restore-archived-lead]");
+  if (!restoreBtn) return;
+  const leadExternalId = String(restoreBtn.dataset.restoreArchivedLead || "").trim();
+  if (!leadExternalId) return;
+  restoreArchivedLead(leadExternalId).catch((error) => {
+    console.error(error);
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = "Could not restore archived lead.";
+  });
 });
 
 document.getElementById("authForm")?.addEventListener("submit", async (event) => {
