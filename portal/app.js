@@ -5308,6 +5308,131 @@ async function apiFetch(input, init = {}) {
   }
 }
 
+function getContentScheduleBounds() {
+  const now = new Date();
+  const minDate = new Date(now);
+  minDate.setMinutes(Math.ceil(minDate.getMinutes() / 5) * 5, 0, 0);
+  const maxDate = new Date(minDate);
+  maxDate.setFullYear(maxDate.getFullYear() + 2);
+  return {
+    min: toLocalDateTimeInput(minDate),
+    max: toLocalDateTimeInput(maxDate),
+    minDate,
+    maxDate,
+  };
+}
+
+function toLocalDateTimeInput(value) {
+  const date = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const dt = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
+  return dt.toISOString().slice(0, 16);
+}
+
+function applyContentScheduleInputBounds() {
+  const input = document.getElementById("contentEditScheduledFor");
+  if (!(input instanceof HTMLInputElement)) return;
+  const bounds = getContentScheduleBounds();
+  input.min = bounds.min;
+  input.max = bounds.max;
+  input.placeholder = "YYYY-MM-DD HH:MM";
+}
+
+function updateContentScheduleButtonState({ valid = true, reason = "" } = {}) {
+  const message = String(reason || "").trim();
+  ["contentScheduleBtn", "contentStepScheduleBtn"].forEach((id) => {
+    const button = document.getElementById(id);
+    if (!(button instanceof HTMLButtonElement)) return;
+    const roleBlocked = button.getAttribute("data-role-disabled") === "true";
+    const assetBlocked = button.getAttribute("data-asset-disabled") === "true";
+    const blocked = roleBlocked || assetBlocked || !valid;
+    button.disabled = blocked;
+    button.setAttribute("aria-disabled", blocked ? "true" : "false");
+    if (!roleBlocked && !assetBlocked && !valid && message) {
+      button.title = message;
+      button.setAttribute("data-disabled-reason", message);
+      button.setAttribute("data-schedule-disabled", "true");
+      return;
+    }
+    if (button.getAttribute("data-schedule-disabled") === "true") {
+      button.removeAttribute("data-schedule-disabled");
+      if (!assetBlocked) {
+        button.removeAttribute("title");
+        button.removeAttribute("data-disabled-reason");
+      }
+    }
+  });
+}
+
+function validateContentScheduleInput({ report = false, silent = false, autocorrect = false } = {}) {
+  const input = document.getElementById("contentEditScheduledFor");
+  if (!(input instanceof HTMLInputElement)) return true;
+  const raw = String(input.value || "").trim();
+  input.setCustomValidity("");
+  if (!raw) {
+    updateContentScheduleButtonState({ valid: false, reason: "Set Schedule At first." });
+    return true;
+  }
+  const formatOk = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw);
+  const year = Number(raw.slice(0, 4));
+  const { minDate, maxDate } = getContentScheduleBounds();
+  const parsed = new Date(raw);
+  const invalidReason = "Use a valid Schedule At value within the next 2 years.";
+  const withinRange =
+    formatOk
+    && Number.isFinite(parsed.getTime())
+    && year >= minDate.getFullYear()
+    && year <= maxDate.getFullYear()
+    && parsed >= minDate
+    && parsed <= maxDate;
+  if (!withinRange) {
+    const shouldAutocorrect =
+      autocorrect
+      && ((!formatOk && /^\d{5,}/.test(raw.replace(/\D/g, ""))) || year > maxDate.getFullYear());
+    if (shouldAutocorrect) {
+      input.value = toLocalDateTimeInput(minDate);
+      input.setCustomValidity("");
+      updateContentScheduleButtonState({ valid: true });
+      if (!silent) {
+        const correctedMessage = `Schedule reset to ${input.value.replace("T", " ")}.`;
+        setContentStudioStatus(correctedMessage);
+        showPortalToast(correctedMessage, "warning", { title: "Schedule Reset" });
+      }
+      return true;
+    }
+    input.setCustomValidity(invalidReason);
+    updateContentScheduleButtonState({ valid: false, reason: invalidReason });
+    if (report) input.reportValidity();
+    if (!silent) setContentStudioStatus(invalidReason);
+    return false;
+  }
+  updateContentScheduleButtonState({ valid: true });
+  return true;
+}
+
+function updateCanvaDesignButtonState() {
+  const button = document.getElementById("contentOpenCanvaDesignBtn");
+  const warning = document.getElementById("contentCanvaLinkWarning");
+  const input = document.getElementById("contentEditCanvaLink");
+  if (!(button instanceof HTMLButtonElement)) return;
+  const url = String(input?.value || "").trim();
+  let valid = false;
+  try {
+    const parsed = new URL(url);
+    valid = parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    valid = false;
+  }
+  button.disabled = !valid;
+  button.setAttribute("aria-disabled", valid ? "false" : "true");
+  button.title = valid ? "Open Canva design in a new tab." : "Insert URL to open";
+  if (warning) {
+    warning.textContent = valid ? "Link Ready" : "Insert URL to open";
+    warning.dataset.state = valid ? "ready" : "missing";
+    warning.title = valid ? "Canva handoff is ready." : "Insert URL to open";
+  }
+}
+
 function readContentEditorValues() {
   return {
     post_id: String(document.getElementById("contentEditPostId")?.value || "").trim(),
@@ -5439,6 +5564,8 @@ function openSelectedCanvaDesign() {
   const url = String(document.getElementById("contentEditCanvaLink")?.value || "").trim();
   if (!url) {
     setContentStudioStatus("No Canva design link set for selected post.");
+    updateCanvaDesignButtonState();
+    showPortalToast("Insert URL to open", "warning", { title: "Canva Link Needed" });
     return;
   }
   window.open(url, "_blank", "noopener,noreferrer");
@@ -5534,6 +5661,7 @@ function applyContentAssetPlaceholderGuard() {
     const button = document.getElementById(id);
     if (!button) return;
     const roleBlocked = button.getAttribute("data-role-disabled") === "true";
+    button.setAttribute("data-asset-disabled", blocked ? "true" : "false");
     button.setAttribute("aria-disabled", blocked ? "true" : "false");
     if (blocked) {
       if (!roleBlocked) button.disabled = true;
@@ -5545,8 +5673,10 @@ function applyContentAssetPlaceholderGuard() {
         button.removeAttribute("title");
         button.removeAttribute("data-disabled-reason");
       }
+      button.removeAttribute("data-asset-disabled");
     }
   });
+  validateContentScheduleInput({ silent: true });
 }
 
 function renderVibeLibrary() {
@@ -5893,14 +6023,17 @@ function populateContentQuickPick() {
 }
 
 function selectContentPost(postId) {
-  const normalized = String(postId || "").trim();
-  if (!normalized) return;
+  const parsedId = Number.parseInt(String(postId || "").trim(), 10);
+  if (!Number.isFinite(parsedId)) throw new Error("Post not found.");
+  const normalized = String(parsedId);
+  const match = state.contentPosts.find((post) => String(post.id) === normalized);
+  if (!match) throw new Error(`Post not found for ID ${normalized}.`);
   state.ui.selectedContentPostId = normalized;
   renderContentPostTable();
   renderContentEditor();
   populateContentQuickPick();
   loadContentRevisionsOnly().catch(() => {});
-  setContentStudioStatus(`Selected ${document.getElementById("contentEditPostId")?.value || "post"}.`);
+  setContentStudioStatus(`Selected ${match.post_id || `#${match.id}`}.`);
 }
 
 function jumpToSelectedContentEditor() {
@@ -6131,6 +6264,36 @@ async function insertContentApproval(postId, decision, note = "") {
   if (error) throw error;
 }
 
+function normalizePersistedContentValue(field, value) {
+  if (field === "scheduled_for") {
+    if (!value) return "";
+    const dt = new Date(value);
+    return Number.isFinite(dt.getTime()) ? dt.toISOString() : "";
+  }
+  if (Array.isArray(value)) return JSON.stringify(value);
+  if (value && typeof value === "object") return JSON.stringify(value);
+  return String(value ?? "").trim();
+}
+
+async function verifyContentPostPersistence(postId, expected = {}) {
+  if (!supabase || !postId) return;
+  const fields = Object.keys(expected).filter(Boolean);
+  if (!fields.length) return;
+  const { data, error } = await supabase
+    .from("content_post")
+    .select(fields.join(","))
+    .eq("id", postId)
+    .maybeSingle();
+  if (error) throw error;
+  if (!data) throw new Error("Saved row could not be reloaded from the database.");
+  const mismatchedField = fields.find(
+    (field) => normalizePersistedContentValue(field, data[field]) !== normalizePersistedContentValue(field, expected[field]),
+  );
+  if (mismatchedField) {
+    throw new Error(`Save could not be confirmed for ${mismatchedField.replace(/_/g, " ")}. Please try again.`);
+  }
+}
+
 function renderContentPillarDistribution(posts) {
   const canvas = document.getElementById("contentPillarDistributionChart");
   const summaryEl = document.getElementById("contentPillarDistributionSummary");
@@ -6315,6 +6478,8 @@ function renderContentEditor() {
     if (emptyState) emptyState.textContent = "Pick a post from Quick Pick or the table to load its working fields here.";
     if (assetHint) assetHint.textContent = "Add the final public export URL here before approval or publishing.";
     if (canvaHint) canvaHint.textContent = "Add the Canva design link here so the next editor can reopen the working file fast.";
+    applyContentScheduleInputBounds();
+    updateCanvaDesignButtonState();
     renderContentPreview();
     renderContentPublishGuide();
     renderContentRequiredChecklist();
@@ -6337,7 +6502,7 @@ function renderContentEditor() {
   setValue("contentEditAssetFile", post.asset_filename || "");
   setValue("contentEditCta", post.cta || "");
   setValue("contentEditHashtags", post.hashtags_text || (post.hashtags || []).join(" "));
-  const normalizedSchedule = String(draftOverride.scheduled_for || post.scheduled_for || "").replace("Z", "").slice(0, 16);
+  const normalizedSchedule = toLocalDateTimeInput(draftOverride.scheduled_for || post.scheduled_for || "");
   setValue("contentEditScheduledFor", normalizedSchedule);
   const hookIdeas = generateGrowthHookIdeas(post.topic || "", post.hook || "");
   setValue("contentHookIdeas", hookIdeas.join("\n"));
@@ -6356,6 +6521,8 @@ function renderContentEditor() {
       ? "Canva design link saved for quick reopen."
       : "Add the Canva design link here so the next editor can reopen the working file fast.";
   }
+  applyContentScheduleInputBounds();
+  updateCanvaDesignButtonState();
   renderContentPreview();
   renderContentPublishGuide();
   renderContentRequiredChecklist();
@@ -6498,9 +6665,14 @@ async function saveSelectedContentDraft() {
     setContentStudioStatus("Select a post first.");
     return;
   }
+  flashContentActionButtons(["contentSaveBtn", "contentStepSaveBtn"], "Checking...", "✔ Saved");
   setContentStudioStatus("Saving...");
   const payload = buildContentPostPayloadFromEditor(post);
   try {
+    if (!validateContentScheduleInput({ report: true, autocorrect: true })) {
+      settleContentActionButtons(["contentSaveBtn", "contentStepSaveBtn"], { ok: false, errorLabel: "Fix Date" });
+      return;
+    }
     const existingSnapshot = createContentRevisionSnapshot(post);
     const { error } = await supabase
       .from("content_post")
@@ -6508,10 +6680,22 @@ async function saveSelectedContentDraft() {
       .eq("id", post.id);
     if (error) throw error;
     await insertContentRevision(post.id, existingSnapshot, "Draft updated in remote portal");
+    await verifyContentPostPersistence(post.id, {
+      caption: payload.caption || null,
+      hook: payload.hook || null,
+      topic: payload.topic || null,
+      canva_design_link: payload.canva_design_link || null,
+      asset_filename: payload.asset_filename || null,
+      scheduled_for: payload.scheduled_for || null,
+    });
     clearContentDraftOverride(post.id);
     await loadContentStudioData("Draft saved.");
+    settleContentActionButtons(["contentSaveBtn", "contentStepSaveBtn"], { ok: true, successLabel: "✔ Saved" });
+    showPortalToast("Update successful.", "success", { title: "Draft Saved" });
   } catch (error) {
+    settleContentActionButtons(["contentSaveBtn", "contentStepSaveBtn"], { ok: false, errorLabel: "Try Again" });
     setContentStudioStatus(String(error.message || error));
+    showPortalToast(`Error: ${String(error.message || error)}`, "error", { title: "Draft Save Failed", duration: 5000 });
   }
 }
 
@@ -6548,6 +6732,25 @@ async function runContentAction(action) {
     }
   }
   const note = action === "request-changes" ? "Needs edits before approval" : "";
+  const buttonMap = {
+    approve: ["contentApproveBtn", "contentStepApproveBtn"],
+    schedule: ["contentScheduleBtn", "contentStepScheduleBtn"],
+    "submit-review": ["contentSubmitReviewBtn"],
+    "request-changes": ["contentRequestChangesBtn"],
+  };
+  const pendingLabelMap = {
+    approve: "Checking...",
+    schedule: "Checking...",
+    "submit-review": "Checking...",
+    "request-changes": "Checking...",
+  };
+  const successButtonLabelMap = {
+    approve: "✔ Approved",
+    schedule: "✔ Scheduled",
+    "submit-review": "✔ Sent",
+    "request-changes": "✔ Updated",
+  };
+  flashContentActionButtons(buttonMap[action] || [], pendingLabelMap[action] || "Checking...", successButtonLabelMap[action] || "✔ Saved");
   setContentStudioStatus(`Applying ${action}...`);
   try {
     const changes = {};
@@ -6564,6 +6767,10 @@ async function runContentAction(action) {
       await insertContentApproval(post.id, "approved", "Approved in remote portal");
     } else if (action === "schedule") {
       const scheduledForValue = String(document.getElementById("contentEditScheduledFor")?.value || "").trim();
+      if (!validateContentScheduleInput({ report: true, autocorrect: true })) {
+        settleContentActionButtons(buttonMap[action] || [], { ok: false, errorLabel: "Fix Date" });
+        return;
+      }
       if (!scheduledForValue) throw new Error("Choose Schedule At before scheduling.");
       changes.status = "scheduled";
       changes.scheduled_for = new Date(scheduledForValue).toISOString();
@@ -6575,16 +6782,23 @@ async function runContentAction(action) {
       .update(changes)
       .eq("id", post.id);
     if (error) throw error;
+    await verifyContentPostPersistence(post.id, changes);
     clearContentDraftOverride(post.id);
     const actionLabelMap = {
-      approve: "Post approved. Schedule time saved.",
-      schedule: "Post scheduled.",
+      approve: "Update successful.",
+      schedule: "Update successful.",
       "request-changes": "Marked for changes.",
       "submit-review": "Submitted for review.",
     };
     await loadContentStudioData(actionLabelMap[action] || `Post ${action} complete.`);
+    settleContentActionButtons(buttonMap[action] || [], { ok: true, successLabel: successButtonLabelMap[action] || "✔ Saved" });
+    showPortalToast(actionLabelMap[action] || `Post ${action} complete.`, "success", {
+      title: action === "approve" ? "Post Approved" : action === "schedule" ? "Post Scheduled" : "Content Updated",
+    });
   } catch (error) {
+    settleContentActionButtons(buttonMap[action] || [], { ok: false, errorLabel: "Try Again" });
     setContentStudioStatus(String(error.message || error));
+    showPortalToast(`Error: ${String(error.message || error)}`, "error", { title: "Content Action Failed", duration: 5000 });
   }
 }
 
@@ -6928,10 +7142,14 @@ function attachContentStudioHandlers() {
     if (!el) return;
     el.addEventListener("input", () => {
       if (id === "contentEditScheduledFor") {
+        validateContentScheduleInput({ silent: true });
         const postId = String(state.ui.selectedContentPostId || "").trim();
         if (postId) {
           setContentDraftOverride(postId, { scheduled_for: String(el.value || "").trim() });
         }
+      }
+      if (id === "contentEditCanvaLink") {
+        updateCanvaDesignButtonState();
       }
       renderContentPreview();
       renderContentPublishGuide();
@@ -6940,10 +7158,14 @@ function attachContentStudioHandlers() {
     });
     el.addEventListener("change", () => {
       if (id === "contentEditScheduledFor") {
+        validateContentScheduleInput({ report: true, autocorrect: true });
         const postId = String(state.ui.selectedContentPostId || "").trim();
         if (postId) {
           setContentDraftOverride(postId, { scheduled_for: String(el.value || "").trim() });
         }
+      }
+      if (id === "contentEditCanvaLink") {
+        updateCanvaDesignButtonState();
       }
       renderContentPreview();
       renderContentPublishGuide();
@@ -7057,8 +7279,11 @@ function attachContentStudioHandlers() {
     }
   });
   document.getElementById("contentQuickPick")?.addEventListener("change", (event) => {
-    const value = String(event.target?.value || "").trim();
-    if (!value) return;
+    const value = Number.parseInt(String(event.target?.value || "").trim(), 10);
+    if (!Number.isFinite(value)) {
+      setContentStudioStatus("Select a valid post from Quick Pick.");
+      return;
+    }
     try {
       selectContentPost(value);
     } catch (error) {
@@ -7066,6 +7291,8 @@ function attachContentStudioHandlers() {
       setContentStudioStatus(`Selection issue: ${String(error.message || error)}`);
     }
   });
+  applyContentScheduleInputBounds();
+  updateCanvaDesignButtonState();
   document.getElementById("contentRevisionTable")?.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof Element)) return;
