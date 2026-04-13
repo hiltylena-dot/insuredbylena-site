@@ -34,6 +34,7 @@ mirror --reverse --verbose --delete \
   --exclude-glob .github* \
   --exclude-glob .cpanel.yml \
   --exclude-glob .htpasswd \
+  --exclude-glob portal-config.js \
   --exclude-glob .DS_Store \
   --exclude-glob README.md \
   --exclude-glob scripts/* \
