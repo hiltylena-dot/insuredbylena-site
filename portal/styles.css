@@ -2123,6 +2123,57 @@ th.sortable[data-sort-dir="desc"]::after {
   color: #486176;
 }
 
+.repair-console-copy {
+  margin: 10px 0 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.repair-console-stat-grid {
+  margin-bottom: 2px;
+}
+
+.repair-console-card strong {
+  font-size: 1rem;
+  word-break: break-word;
+}
+
+.repair-console-links {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.repair-link-card {
+  display: grid;
+  gap: 6px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.78);
+  color: #112031;
+  text-decoration: none;
+  transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.repair-link-card:hover,
+.repair-link-card:focus-visible {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 24px rgba(31, 45, 61, 0.08);
+  border-color: rgba(47, 103, 216, 0.22);
+}
+
+.repair-link-card strong {
+  font-size: 0.92rem;
+  color: #112031;
+}
+
+.repair-link-card span {
+  font-size: 0.82rem;
+  color: #486176;
+  line-height: 1.45;
+}
+
 .health-check-severity {
   display: inline-flex;
   align-items: center;

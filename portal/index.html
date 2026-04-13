@@ -952,6 +952,50 @@
                 </tbody>
               </table>
             </div>
+            <div class="panel-header compact" style="margin-top: 16px;">
+              <div><p class="panel-label">Repair Console</p><h3>Laptop-first repair cockpit</h3></div>
+              <span id="repairConsoleSummary" class="table-summary">Not loaded.</span>
+            </div>
+            <p class="repair-console-copy">Use this panel to confirm what backend revision is live, spot recent failures, and jump straight to the hosted tools you need from your laptop.</p>
+            <div class="detail-actions" style="margin-top: 8px;">
+              <button id="refreshRepairConsoleBtn" class="ghost-button slim" type="button">Refresh Repair Console</button>
+            </div>
+            <div id="repairConsoleStatGrid" class="health-check-stat-grid repair-console-stat-grid" style="margin-top: 12px;">
+              <div class="health-check-stat-card repair-console-card">
+                <span class="health-check-stat-label">Backend revision</span>
+                <strong id="repairBackendRevision">-</strong>
+              </div>
+              <div class="health-check-stat-card repair-console-card">
+                <span class="health-check-stat-label">Build SHA</span>
+                <strong id="repairBackendSha">-</strong>
+              </div>
+              <div class="health-check-stat-card repair-console-card">
+                <span class="health-check-stat-label">Publisher mode</span>
+                <strong id="repairPublisherMode">-</strong>
+              </div>
+              <div class="health-check-stat-card repair-console-card">
+                <span class="health-check-stat-label">Recent backend errors</span>
+                <strong id="repairErrorCount">-</strong>
+              </div>
+            </div>
+            <div class="repair-console-links" id="repairConsoleLinks" style="margin-top: 12px;"></div>
+            <div class="table-wrap" style="margin-top: 12px;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Route</th>
+                    <th>Status</th>
+                    <th>Error code</th>
+                    <th>Message</th>
+                    <th>Request ID</th>
+                  </tr>
+                </thead>
+                <tbody id="repairConsoleErrorTable">
+                  <tr><td colspan="6" class="muted">Recent backend errors will appear here after refresh.</td></tr>
+                </tbody>
+              </table>
+            </div>
             <div class="detail-actions">
               <button id="clearTestDataBtn" class="danger-button" type="button">Clear Test Data</button>
             </div>

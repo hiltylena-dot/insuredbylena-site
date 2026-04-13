@@ -50,6 +50,8 @@ const state = {
   cleanupAuditLogs: [],
   archivedLeads: [],
   healthCheckReport: null,
+  backendVersionInfo: null,
+  repairErrorEvents: [],
   callDeskActivityEntries: [],
   leadDocuments: [],
   todayAppointments: [],
@@ -207,6 +209,7 @@ const LOCAL_DB_CARRIER_CONFIG_URL = API_ORIGIN ? `${API_ORIGIN}/api/carrier-conf
 const LOCAL_DB_CALENDAR_SCHEDULE_URL = API_ORIGIN ? `${API_ORIGIN}/api/calendar/schedule` : "";
 const LOCAL_DB_CALENDAR_TODAY_URL = API_ORIGIN ? `${API_ORIGIN}/api/calendar/today` : "";
 const LOCAL_DB_CALENDAR_WEEK_URL = API_ORIGIN ? `${API_ORIGIN}/api/calendar/week` : "";
+const LOCAL_DB_VERSION_URL = API_ORIGIN ? `${API_ORIGIN}/api/version` : "";
 const LOCAL_DB_PURGE_TEST_DATA_URL = API_ORIGIN ? `${API_ORIGIN}/api/admin/purge-test-data` : "";
 const LOCAL_DB_CONTENT_POSTS_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/posts` : "";
 const LOCAL_DB_CONTENT_POSTS_IMPORT_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/posts/import` : "";
@@ -215,6 +218,33 @@ const LOCAL_DB_CONTENT_PUBLISH_RUN_URL = API_ORIGIN ? `${API_ORIGIN}/api/content
 const LOCAL_DB_CONTENT_PUBLISH_JOBS_URL = API_ORIGIN ? `${API_ORIGIN}/api/content/publish/jobs` : "";
 const IS_LOCAL_DEV = ["localhost", "127.0.0.1"].includes(window.location.hostname);
 const ENABLE_OPTIONAL_STATIC_DATASETS = IS_LOCAL_DEV || Boolean(window.PORTAL_CONFIG?.enableLocalDatasets);
+const REPAIR_LINKS = [
+  {
+    label: "GitHub Actions",
+    href: "https://github.com/hiltylena-dot/insuredbylena-site/actions",
+    note: "Rerun site or backend deploys from your laptop.",
+  },
+  {
+    label: "Cloud Run Service",
+    href: "https://console.cloud.google.com/run/detail/us-central1/insuredbylena-portal-api/metrics?project=hanky-491703",
+    note: "Check the live backend revision and service health.",
+  },
+  {
+    label: "Cloud Run Logs",
+    href: "https://console.cloud.google.com/logs/query;query=resource.type%3D%22cloud_run_revision%22%0Aresource.labels.service_name%3D%22insuredbylena-portal-api%22?project=hanky-491703",
+    note: "Open backend logs when saves or publishing fail.",
+  },
+  {
+    label: "Supabase Project",
+    href: "https://supabase.com/dashboard/project/ixpdvxumkloytwfezmga",
+    note: "Use SQL Editor, auth, and table views.",
+  },
+  {
+    label: "Google Apps Script",
+    href: "https://script.google.com/home",
+    note: "Repair the hosted Google Calendar web app.",
+  },
+];
 const PIPELINE_STAGES = ["app_submitted", "underwriting", "approved", "issued", "paid"];
 const LEASE_WINDOW_MS = 15 * 60 * 1000;
 const FINAL_DISPOSITIONS = new Set(["sold", "not_qualified", "not_interested", "issued", "paid"]);
@@ -3416,6 +3446,7 @@ async function refreshPortalLeadState(statusText = "") {
   await refreshHealthCheckTools({ logAudit: false, toast: false, status: false }).catch(() => {});
   await refreshArchivedLeadTools().catch(() => {});
   await refreshCallDeskActivityForLead().catch(() => {});
+  await refreshRepairConsole({ toast: false, status: false }).catch(() => {});
   if (statusText) {
     const statusEl = document.getElementById("purgeStatus");
     if (statusEl) statusEl.textContent = statusText;
@@ -3574,6 +3605,138 @@ async function refreshCleanupAuditLog() {
     return;
   }
   renderCleanupAuditLog();
+}
+
+async function loadBackendVersionInfo() {
+  if (!LOCAL_DB_VERSION_URL.trim()) return null;
+  const response = await apiFetch(LOCAL_DB_VERSION_URL, { method: "GET" });
+  if (!response.ok) throw new Error(`Version check failed (${response.status})`);
+  return await response.json();
+}
+
+async function loadRepairErrorEventsFromSupabase() {
+  if (!supabase || !canPublishContent()) return [];
+  const { data, error } = await supabase
+    .from("error_event")
+    .select("id, occurred_at, route, status, error_code, message, request_id")
+    .order("occurred_at", { ascending: false })
+    .limit(15);
+  if (error) throw error;
+  return Array.isArray(data) ? data : [];
+}
+
+function renderRepairConsole() {
+  const summaryEl = document.getElementById("repairConsoleSummary");
+  const revisionEl = document.getElementById("repairBackendRevision");
+  const shaEl = document.getElementById("repairBackendSha");
+  const publisherEl = document.getElementById("repairPublisherMode");
+  const errorCountEl = document.getElementById("repairErrorCount");
+  const linksEl = document.getElementById("repairConsoleLinks");
+  const table = document.getElementById("repairConsoleErrorTable");
+  if (!summaryEl || !revisionEl || !shaEl || !publisherEl || !errorCountEl || !linksEl || !table) return;
+
+  const version = state.backendVersionInfo;
+  const errors = Array.isArray(state.repairErrorEvents) ? state.repairErrorEvents : [];
+  const isAdmin = canPublishContent();
+
+  linksEl.innerHTML = REPAIR_LINKS.map((item) => `
+    <a class="repair-link-card" href="${escapeHtml(String(item.href || "#"))}" target="_blank" rel="noreferrer">
+      <strong>${escapeHtml(String(item.label || ""))}</strong>
+      <span>${escapeHtml(String(item.note || ""))}</span>
+    </a>
+  `).join("");
+
+  revisionEl.textContent = String(version?.revision || "-");
+  shaEl.textContent = String(version?.buildSha || "-");
+  publisherEl.textContent = String(version?.publisherMode || "-");
+  errorCountEl.textContent = isAdmin ? String(errors.length) : "Locked";
+
+  if (!version && !isAdmin) {
+    summaryEl.textContent = "Admin access required for repair data.";
+    table.innerHTML = `<tr><td colspan="6" class="muted">Only admins can inspect the repair console.</td></tr>`;
+    return;
+  }
+
+  if (!version) {
+    summaryEl.textContent = isAdmin ? "Not loaded." : "Version unavailable.";
+    table.innerHTML = `<tr><td colspan="6" class="muted">Refresh Repair Console to load the current backend version and recent backend failures.</td></tr>`;
+    return;
+  }
+
+  const versionTime = version?.buildTime ? formatDateTimeShort(version.buildTime) : "time unavailable";
+  summaryEl.textContent = isAdmin
+    ? `${errors.length} recent backend error(s) • backend ${String(version.buildSha || "-")} • ${versionTime}`
+    : `Backend ${String(version.buildSha || "-")} • ${versionTime}`;
+
+  if (!isAdmin) {
+    table.innerHTML = `<tr><td colspan="6" class="muted">Version is visible, but recent backend errors require admin access.</td></tr>`;
+    return;
+  }
+
+  if (!errors.length) {
+    table.innerHTML = `<tr><td colspan="6" class="muted">No recent backend errors logged. This is what we want to see.</td></tr>`;
+    return;
+  }
+
+  table.innerHTML = errors.map((row) => `
+    <tr>
+      <td>${escapeHtml(formatDateTimeShort(row.occurred_at))}</td>
+      <td>${escapeHtml(String(row.route || "-"))}</td>
+      <td>${escapeHtml(String(row.status ?? "-"))}</td>
+      <td>${escapeHtml(String(row.error_code || "-"))}</td>
+      <td>${escapeHtml(String(row.message || "-"))}</td>
+      <td><code>${escapeHtml(String(row.request_id || "-"))}</code></td>
+    </tr>
+  `).join("");
+}
+
+async function refreshRepairConsole(options = {}) {
+  const summaryEl = document.getElementById("repairConsoleSummary");
+  const statusEl = document.getElementById("purgeStatus");
+  const shouldToast = Boolean(options.toast);
+  const updateStatus = options.status !== false;
+  if (!summaryEl) return;
+
+  summaryEl.textContent = "Loading repair console...";
+  try {
+    const [versionResult, errorResult] = await Promise.allSettled([
+      loadBackendVersionInfo(),
+      loadRepairErrorEventsFromSupabase(),
+    ]);
+
+    if (versionResult.status === "fulfilled") {
+      state.backendVersionInfo = versionResult.value;
+    } else {
+      state.backendVersionInfo = null;
+      throw versionResult.reason;
+    }
+
+    if (errorResult.status === "fulfilled") {
+      state.repairErrorEvents = errorResult.value;
+    } else {
+      console.error(errorResult.reason);
+      state.repairErrorEvents = [];
+    }
+
+    renderRepairConsole();
+    if (updateStatus && statusEl) {
+      statusEl.textContent = "Repair console refreshed.";
+    }
+    if (shouldToast) {
+      showPortalToast("Repair console refreshed.", "success", { title: "Repair Console" });
+    }
+  } catch (error) {
+    console.error(error);
+    state.backendVersionInfo = null;
+    renderRepairConsole();
+    if (updateStatus && statusEl) statusEl.textContent = "Could not refresh repair console.";
+    if (shouldToast) {
+      showPortalToast(String(error?.message || error || "Could not refresh repair console."), "error", {
+        title: "Repair Console Failed",
+        duration: 5000,
+      });
+    }
+  }
 }
 
 async function loadArchivedLeadsFromSupabase() {
@@ -11513,6 +11676,7 @@ async function initialize() {
     await refreshHealthCheckTools({ logAudit: false, toast: false, status: false }).catch(() => {});
     await refreshArchivedLeadTools().catch(() => {});
     await refreshCleanupAuditLog().catch(() => {});
+    await refreshRepairConsole({ toast: false, status: false }).catch(() => {});
     await loadCarrierConfigs();
   } catch (error) {
     document.getElementById("datasetStatus").textContent = String(error.message || error);
@@ -11879,6 +12043,14 @@ document.getElementById("runHealthCheckBtn")?.addEventListener("click", () => {
     console.error(error);
     const statusEl = document.getElementById("purgeStatus");
     if (statusEl) statusEl.textContent = "Health check failed.";
+  });
+});
+
+document.getElementById("refreshRepairConsoleBtn")?.addEventListener("click", () => {
+  refreshRepairConsole({ toast: true, status: true }).catch((error) => {
+    console.error(error);
+    const statusEl = document.getElementById("purgeStatus");
+    if (statusEl) statusEl.textContent = "Could not refresh repair console.";
   });
 });
 
