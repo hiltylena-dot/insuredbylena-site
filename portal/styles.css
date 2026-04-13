@@ -3891,15 +3891,15 @@ button:disabled:hover,
 /* Visual reset: tighter, darker, more professional shell */
 
 html {
-  background: #07101a;
+  background: #fbf7f2;
 }
 
 body {
   background:
-    radial-gradient(circle at top left, rgba(113, 216, 255, 0.1), transparent 24%),
-    radial-gradient(circle at top right, rgba(47, 103, 216, 0.08), transparent 20%),
-    linear-gradient(180deg, #07101a 0%, #0d1723 100%);
-  color: #eef4fb;
+    radial-gradient(circle at top left, rgba(143, 132, 119, 0.1), transparent 24%),
+    radial-gradient(circle at top right, rgba(120, 90, 74, 0.08), transparent 20%),
+    linear-gradient(180deg, #fbf7f2 0%, #f3ece4 100%);
+  color: #292521;
 }
 
 .app-shell {
@@ -5521,14 +5521,68 @@ body.dense #callDeskTabPanel .panel-header .panel-label {
 }
 
 /* Final hard overrides for broken header/grid rendering */
+:root {
+  --bg-accent:
+    radial-gradient(circle at 12% 8%, rgba(143, 132, 119, 0.1), transparent 26%),
+    radial-gradient(circle at 88% 12%, rgba(120, 90, 74, 0.08), transparent 24%),
+    linear-gradient(180deg, #fbf7f2 0%, #f3ece4 100%) !important;
+  --panel: rgba(253, 249, 244, 0.92) !important;
+  --panel-strong: #fdf9f4 !important;
+  --text: #292521 !important;
+  --muted: #6a6259 !important;
+  --line: rgba(41, 37, 33, 0.1) !important;
+  --accent: #8f8477 !important;
+  --accent-gradient: linear-gradient(135deg, #8f8477, #b1a18e) !important;
+  --green: #64715e !important;
+  --green-soft: rgba(100, 113, 94, 0.12) !important;
+  --amber: #8b6d4c !important;
+  --amber-soft: rgba(139, 109, 76, 0.12) !important;
+  --red: #a16056 !important;
+  --red-soft: rgba(161, 96, 86, 0.12) !important;
+  --teal-soft: rgba(124, 113, 99, 0.1) !important;
+  --shadow: 0 14px 32px rgba(54, 38, 31, 0.08) !important;
+}
+
+.auth-gate {
+  background:
+    linear-gradient(180deg, rgba(54, 38, 31, 0.88), rgba(41, 29, 23, 0.94)),
+    radial-gradient(circle at top left, rgba(143, 132, 119, 0.16), transparent 28%) !important;
+}
+
+.auth-card {
+  border-color: rgba(223, 213, 201, 0.26) !important;
+  background: linear-gradient(180deg, rgba(69, 50, 40, 0.98), rgba(47, 34, 28, 0.98)) !important;
+  box-shadow: 0 24px 60px rgba(41, 29, 23, 0.34) !important;
+}
+
+.auth-eyebrow {
+  color: #e8d8c8 !important;
+}
+
+.auth-copy,
+.auth-status {
+  color: #e6ddd3 !important;
+}
+
+.auth-form span,
+.auth-card h1,
+.auth-form input {
+  color: #f8f4ef !important;
+}
+
+.auth-form input {
+  border-color: rgba(223, 213, 201, 0.22) !important;
+  background: rgba(69, 50, 40, 0.72) !important;
+}
+
 .top-nav {
   width: 100% !important;
   position: sticky !important;
   top: 0 !important;
   z-index: 100 !important;
-  background: rgba(255, 255, 255, 0.84) !important;
-  border-bottom: 1px solid rgba(26, 42, 58, 0.1) !important;
-  box-shadow: 0 10px 24px rgba(26, 42, 58, 0.08) !important;
+  background: rgba(253, 249, 244, 0.86) !important;
+  border-bottom: 1px solid rgba(41, 37, 33, 0.08) !important;
+  box-shadow: 0 10px 24px rgba(54, 38, 31, 0.08) !important;
   backdrop-filter: blur(12px) !important;
 }
 
@@ -5541,49 +5595,60 @@ body.dense #callDeskTabPanel .panel-header .panel-label {
   overflow-x: auto !important;
   white-space: nowrap !important;
   width: 100% !important;
-  background: rgba(255, 255, 255, 0.7) !important;
-  border: 1px solid rgba(26, 42, 58, 0.08) !important;
-  box-shadow: 0 12px 28px rgba(26, 42, 58, 0.08) !important;
+  background: rgba(253, 249, 244, 0.72) !important;
+  border: 1px solid rgba(41, 37, 33, 0.08) !important;
+  box-shadow: 0 12px 28px rgba(54, 38, 31, 0.07) !important;
 }
 
 .top-nav .tab-button {
-  color: #1a2a3a !important;
+  color: #292521 !important;
   background: transparent !important;
 }
 
 .top-nav .tab-button:not(.active) {
-  color: #1a2a3a !important;
+  color: #292521 !important;
   background: transparent !important;
-  border-color: rgba(26, 42, 58, 0.12) !important;
+  border-color: rgba(41, 37, 33, 0.12) !important;
 }
 
 .top-nav .tab-button:hover,
 .top-nav .tab-button:focus-visible {
-  color: #9b5416 !important;
-  background: rgba(230, 126, 34, 0.12) !important;
+  color: #5f554c !important;
+  background: rgba(143, 132, 119, 0.12) !important;
 }
 
 .top-nav .tab-button.active {
   color: #ffffff !important;
-  background: linear-gradient(135deg, #e67e22, #f59e0b) !important;
+  background: linear-gradient(135deg, #8f8477, #b1a18e) !important;
   border-color: transparent !important;
-  box-shadow: 0 12px 26px rgba(230, 126, 34, 0.24) !important;
+  box-shadow: 0 12px 26px rgba(143, 132, 119, 0.22) !important;
 }
 
 .top-brand,
 .top-nav-right,
 .top-nav-right *,
 #datasetStatus {
-  color: #1a2a3a !important;
+  color: #292521 !important;
 }
 
 .status-pill,
 #datasetStatus,
 .top-status-pills .status-pill {
-  color: #9b5416 !important;
-  background: rgba(230, 126, 34, 0.12) !important;
-  border-color: rgba(230, 126, 34, 0.2) !important;
+  color: #5f554c !important;
+  background: rgba(143, 132, 119, 0.12) !important;
+  border-color: rgba(143, 132, 119, 0.22) !important;
   box-shadow: none !important;
+}
+
+html,
+body,
+.app-shell,
+.main-panel {
+  color: #292521 !important;
+  background:
+    radial-gradient(circle at 12% 8%, rgba(143, 132, 119, 0.1), transparent 26%),
+    radial-gradient(circle at 88% 12%, rgba(120, 90, 74, 0.08), transparent 24%),
+    linear-gradient(180deg, #fbf7f2 0%, #f3ece4 100%) !important;
 }
 
 @media (max-width: 1300px) {

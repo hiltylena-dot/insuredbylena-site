@@ -2766,34 +2766,34 @@ section.segment-strip {
   }
 }
 
-/* Final brand correction: restore slate + amber palette after older overrides */
+/* Final brand correction: restore insuredbylena earthy palette */
 :root {
-  --bg: #f8fafc;
-  --surface: #ffffff;
-  --ink: #1a2a3a;
-  --muted: #64748b;
-  --line: rgba(26, 42, 58, 0.14);
-  --accent: #e67e22;
+  --bg: #f6f1ea;
+  --surface: #fdf9f4;
+  --ink: #292521;
+  --muted: #6a6259;
+  --line: rgba(41, 37, 33, 0.12);
+  --accent: #8f8477;
 }
 
 body {
-  background: var(--bg) !important;
+  background: linear-gradient(180deg, #fbf7f2 0%, var(--bg) 38%, #f2ece4 100%) !important;
   color: var(--muted) !important;
 }
 
 .ambient-layer {
   background:
-    radial-gradient(circle at 12% 8%, rgba(26, 42, 58, 0.04), transparent 34%),
-    radial-gradient(circle at 86% 14%, rgba(230, 126, 34, 0.08), transparent 30%),
-    linear-gradient(160deg, rgba(255, 255, 255, 0.52), rgba(248, 250, 252, 0.22)) !important;
+    radial-gradient(circle at 14% 10%, rgba(143, 132, 119, 0.08), transparent 30%),
+    radial-gradient(circle at 84% 16%, rgba(41, 37, 33, 0.05), transparent 28%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.26), rgba(246, 241, 234, 0.18)) !important;
 }
 
 .site-header,
 .site-header.is-scrolled,
 .site-header.is-hidden {
-  border-color: rgba(26, 42, 58, 0.1) !important;
-  background: rgba(255, 255, 255, 0.78) !important;
-  box-shadow: 0 14px 30px rgba(26, 42, 58, 0.08) !important;
+  border-color: rgba(41, 37, 33, 0.1) !important;
+  background: rgba(253, 249, 244, 0.84) !important;
+  box-shadow: 0 18px 34px rgba(54, 38, 31, 0.1) !important;
 }
 
 .brand-mark,
@@ -2806,9 +2806,9 @@ body {
 }
 
 .brand-email {
-  border-color: rgba(26, 42, 58, 0.12) !important;
-  background: rgba(255, 255, 255, 0.88) !important;
-  box-shadow: 0 10px 24px rgba(26, 42, 58, 0.08) !important;
+  border-color: rgba(41, 37, 33, 0.12) !important;
+  background: rgba(253, 249, 244, 0.86) !important;
+  box-shadow: 0 10px 24px rgba(54, 38, 31, 0.08) !important;
 }
 
 .brand-email:hover,
@@ -2829,7 +2829,7 @@ body {
   background: var(--accent) !important;
   color: #ffffff !important;
   border-color: transparent !important;
-  box-shadow: 0 14px 28px rgba(230, 126, 34, 0.2) !important;
+  box-shadow: 0 14px 28px rgba(143, 132, 119, 0.22) !important;
 }
 
 .portal-link,
@@ -2837,17 +2837,17 @@ body {
 .hero .btn.ghost,
 .segment-chip {
   color: var(--ink) !important;
-  background: rgba(255, 255, 255, 0.78) !important;
-  border-color: rgba(26, 42, 58, 0.18) !important;
+  background: rgba(253, 249, 244, 0.78) !important;
+  border-color: rgba(41, 37, 33, 0.14) !important;
 }
 
 .segment-chip[aria-expanded="true"] {
-  background: rgba(230, 126, 34, 0.12) !important;
-  border-color: rgba(230, 126, 34, 0.24) !important;
-  color: #9b5416 !important;
+  background: rgba(143, 132, 119, 0.12) !important;
+  border-color: rgba(143, 132, 119, 0.24) !important;
+  color: #5f554c !important;
 }
 
 .proof-quote {
-  background: linear-gradient(180deg, rgba(26, 42, 58, 0.96), rgba(38, 57, 76, 0.94)) !important;
-  box-shadow: 0 20px 44px rgba(26, 42, 58, 0.18) !important;
+  background: linear-gradient(180deg, rgba(86, 62, 51, 0.96), rgba(111, 83, 67, 0.94)) !important;
+  box-shadow: 0 20px 44px rgba(54, 38, 31, 0.18) !important;
 }
