@@ -127,6 +127,7 @@ class BackendBaseHandlerMixin:
             parsed = urlparse(self.path)
             exact_routes = {
                 "/api/health": self._handle_api_health_get,
+                "/api/version": self._handle_api_version_get,
                 "/api/content/publisher/status": self._handle_content_publisher_status_get,
                 "/api/content/posts": lambda: self._handle_content_posts_get(parsed.query),
                 "/api/content/publish/jobs": lambda: self._handle_content_publish_jobs_get(parsed.query),
@@ -181,4 +182,3 @@ class BackendBaseHandlerMixin:
         if not isinstance(data, dict):
             raise ValueError("Expected a JSON object body")
         return data
-

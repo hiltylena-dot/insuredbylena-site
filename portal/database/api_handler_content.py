@@ -63,6 +63,26 @@ class ContentHandlerMixin:
             self._send_error(str(exc))
 
 
+    def _handle_api_version_get(self) -> None:
+        import local_db_api as api
+        try:
+            self._send_json(
+                {
+                    "ok": True,
+                    "service": api.SERVICE_NAME,
+                    "buildSha": api.BUILD_SHA,
+                    "buildTime": api.BUILD_TIME,
+                    "revision": api.REVISION_NAME,
+                    "contentStoreMode": api._content_store_mode(),
+                    "publisherMode": api._publisher_mode(),
+                    "supabaseConfigured": bool(api.SUPABASE_URL and api.SUPABASE_SERVICE_ROLE_KEY),
+                    "googleCalendarConfigured": bool(api.GOOGLE_CALENDAR_WEB_APP_URL),
+                }
+            )
+        except Exception as exc:  # pragma: no cover
+            self._send_error(str(exc))
+
+
     def _handle_content_publisher_status_get(self) -> None:
         import local_db_api as api
         try:
@@ -973,4 +993,3 @@ class ContentHandlerMixin:
         except Exception as exc:  # pragma: no cover
             self._set_headers(500)
             self.wfile.write(json.dumps({"ok": False, "error": str(exc)}).encode("utf-8"))
-

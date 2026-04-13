@@ -31,6 +31,10 @@ DRIVE_DB_PATH = DRIVE_DB_DIR / "insurance_lifecycle.db"
 HOST = os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1"
 PORT = int(os.getenv("PORT", "8787").strip() or "8787")
 APP_TIMEZONE = ZoneInfo(os.getenv("PORTAL_TIMEZONE", "America/New_York").strip() or "America/New_York")
+BUILD_SHA = os.getenv("BUILD_SHA", "").strip()
+BUILD_TIME = os.getenv("BUILD_TIME", "").strip()
+SERVICE_NAME = os.getenv("K_SERVICE", os.getenv("SERVICE_NAME", "insuredbylena-portal-api")).strip() or "insuredbylena-portal-api"
+REVISION_NAME = os.getenv("K_REVISION", "").strip()
 
 
 def load_local_env() -> None:

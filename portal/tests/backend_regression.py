@@ -150,6 +150,15 @@ def main() -> int:
         assert_true(bool((health or {}).get("requestId")), f"Health response missing requestId body field: {health}")
         results["health"] = {"status": status, "requestId": (health or {}).get("requestId")}
 
+        status, version = http_json(f"{API_BASE}/api/version")
+        assert_true(status == 200 and _json_ok(version), f"API version failed: {version}")
+        assert_true(bool((version or {}).get("service")), f"Version response missing service: {version}")
+        results["version"] = {
+            "service": (version or {}).get("service"),
+            "buildSha": (version or {}).get("buildSha"),
+            "revision": (version or {}).get("revision"),
+        }
+
         status, bad_doc, _ = http_json_with_headers(f"{API_BASE}/api/lead-documents/0/archive", method="POST", body={})
         assert_true(status == 500 and isinstance(bad_doc, dict), f"Expected document archive error response: {bad_doc}")
         assert_true(bool(bad_doc.get("requestId")), f"Error response missing requestId: {bad_doc}")
