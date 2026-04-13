@@ -1,1 +1,3 @@
 .DS_Store
+portal/tests/node_modules/
+portal/tests/artifacts/

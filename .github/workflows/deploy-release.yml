@@ -23,7 +23,7 @@ jobs:
       - name: Checkout release
         uses: actions/checkout@v5
         with:
-          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.ref || 'main' }}
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.ref || github.sha }}
 
       - name: Install lftp
         run: sudo apt-get update && sudo apt-get install -y lftp
@@ -38,3 +38,38 @@ jobs:
           REMOTE_PORTAL_AUTH_DIR: ${{ secrets.NAMECHEAP_PORTAL_AUTH_DIR }}
           AUTH_FILE_LOCAL: .htpasswd
         run: bash scripts/deploy-release.sh
+
+  frontend-smoke:
+    needs: deploy
+    runs-on: ubuntu-latest
+    env:
+      PORTAL_URL: https://insuredbylena.com/portal/
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+    steps:
+      - name: Checkout release
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event_name == 'release' && github.event.release.tag_name || github.event.inputs.ref || github.sha }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install frontend smoke dependencies
+        run: npm ci --prefix portal/tests
+
+      - name: Install Playwright Chromium
+        run: npx --prefix portal/tests playwright install --with-deps chromium
+
+      - name: Run frontend smoke
+        run: node portal/tests/frontend_smoke.mjs
+
+      - name: Upload frontend smoke artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-smoke-artifacts
+          path: portal/tests/artifacts
+          if-no-files-found: ignore
