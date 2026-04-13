@@ -14,8 +14,7 @@ class DocumentHandlerMixin:
         try:
             lead = api._load_supabase_lead_by_external_id(lead_external_id)
             if not lead:
-                self._set_headers(404)
-                self.wfile.write(json.dumps({"ok": False, "error": "lead_not_found"}).encode("utf-8"))
+                self._send_error("lead_not_found", status=404, code="lead_not_found", log_event=False)
                 return
             lead_id = int(lead.get("lead_id") or 0)
             rows = api._supabase_rest(
@@ -26,11 +25,10 @@ class DocumentHandlerMixin:
             self._set_headers(200)
             self.wfile.write(json.dumps({"ok": True, "leadId": lead_id, "items": items}).encode("utf-8"))
         except Exception as exc:  # pragma: no cover
-            self._set_headers(500)
             message = str(exc)
             if "lead_document" in message:
                 message = "Lead document hub is not configured yet. Run lead_document_hub.sql in Supabase."
-            self.wfile.write(json.dumps({"ok": False, "error": message}).encode("utf-8"))
+            self._send_error(message, status=500, code="lead_documents_fetch_failed", details={"leadExternalId": lead_external_id})
 
 
     def _handle_lead_documents_post(self, lead_external_id: str) -> None:
@@ -38,8 +36,7 @@ class DocumentHandlerMixin:
         try:
             lead = api._load_supabase_lead_by_external_id(lead_external_id)
             if not lead:
-                self._set_headers(404)
-                self.wfile.write(json.dumps({"ok": False, "error": "lead_not_found"}).encode("utf-8"))
+                self._send_error("lead_not_found", status=404, code="lead_not_found", log_event=False)
                 return
             data = self._read_json_body()
             file_name = api._trim(data.get("fileName"))
@@ -122,11 +119,10 @@ class DocumentHandlerMixin:
             self._set_headers(200)
             self.wfile.write(json.dumps({"ok": True, "item": api._lead_document_row_to_payload(row)}).encode("utf-8"))
         except Exception as exc:  # pragma: no cover
-            self._set_headers(500)
             message = str(exc)
             if "lead_document" in message:
                 message = "Lead document hub is not configured yet. Run lead_document_hub.sql in Supabase."
-            self.wfile.write(json.dumps({"ok": False, "error": message}).encode("utf-8"))
+            self._send_error(message, status=500, code="lead_document_create_failed", details={"leadExternalId": lead_external_id})
 
 
     def _handle_lead_document_archive(self, document_id_raw: str) -> None:
@@ -145,9 +141,7 @@ class DocumentHandlerMixin:
             self._set_headers(200)
             self.wfile.write(json.dumps({"ok": True, "item": api._lead_document_row_to_payload(row or {})}).encode("utf-8"))
         except Exception as exc:  # pragma: no cover
-            self._set_headers(500)
             message = str(exc)
             if "lead_document" in message:
                 message = "Lead document hub is not configured yet. Run lead_document_hub.sql in Supabase."
-            self.wfile.write(json.dumps({"ok": False, "error": message}).encode("utf-8"))
-
+            self._send_error(message, status=500, code="lead_document_archive_failed", details={"documentId": document_id_raw})

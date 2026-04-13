@@ -123,11 +123,9 @@ class LeadHandlerMixin:
                 ).rowcount
                 conn.commit()
             api.mirror_db_to_drive()
-            self._set_headers(200)
-            self.wfile.write(json.dumps({"ok": True, "deleted": int(deleted or 0), "reset": int(reset or 0)}).encode("utf-8"))
+            self._send_json({"ok": True, "deleted": int(deleted or 0), "reset": int(reset or 0)})
         except Exception as exc:  # pragma: no cover
-            self._set_headers(500)
-            self.wfile.write(json.dumps({"ok": False, "error": str(exc)}).encode("utf-8"))
+            self._send_error(str(exc), code="purge_test_data_failed")
 
 
     def _handle_pipeline_update(self, lead_external_id: str) -> None:
@@ -217,4 +215,3 @@ class LeadHandlerMixin:
             self._send_json({"ok": True, "leadId": api._trim(lead_external_id), "last_opened_at": opened_at})
         except Exception as exc:  # pragma: no cover
             self._send_error(str(exc))
-

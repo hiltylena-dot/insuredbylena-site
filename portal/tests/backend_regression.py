@@ -59,6 +59,36 @@ def http_json(
             return exc.code, {"ok": False, "error": raw}
 
 
+def http_json_with_headers(
+    url: str,
+    *,
+    method: str = "GET",
+    body: dict | list | None = None,
+    headers: dict[str, str] | None = None,
+) -> tuple[int, object, dict[str, str]]:
+    payload = None if body is None else json.dumps(body).encode("utf-8")
+    req = urlrequest.Request(
+        url,
+        data=payload,
+        method=method.upper(),
+        headers={
+            "Content-Type": "application/json",
+            **(headers or {}),
+        },
+    )
+    try:
+        with urlrequest.urlopen(req, timeout=120) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            return resp.status, json.loads(raw or "{}"), dict(resp.headers.items())
+    except urlerror.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        try:
+            payload_obj = json.loads(raw or "{}")
+        except Exception:
+            payload_obj = {"ok": False, "error": raw}
+        return exc.code, payload_obj, dict(exc.headers.items())
+
+
 def supabase_rest(
     path: str,
     *,
@@ -106,9 +136,17 @@ def main() -> int:
     content_post_id = 0
     results: dict[str, object] = {}
     try:
-        status, health = http_json(f"{API_BASE}/api/health")
+        status, health, health_headers = http_json_with_headers(f"{API_BASE}/api/health")
         assert_true(status == 200 and _json_ok(health), f"API health failed: {health}")
-        results["health"] = {"status": status}
+        assert_true(bool(health_headers.get("X-Request-Id")), f"Health response missing X-Request-Id header: {health_headers}")
+        assert_true(bool((health or {}).get("requestId")), f"Health response missing requestId body field: {health}")
+        results["health"] = {"status": status, "requestId": (health or {}).get("requestId")}
+
+        status, bad_doc, _ = http_json_with_headers(f"{API_BASE}/api/lead-documents/0/archive", method="POST", body={})
+        assert_true(status == 500 and isinstance(bad_doc, dict), f"Expected document archive error response: {bad_doc}")
+        assert_true(bool(bad_doc.get("requestId")), f"Error response missing requestId: {bad_doc}")
+        assert_true(bool(bad_doc.get("errorCode")), f"Error response missing errorCode: {bad_doc}")
+        results["error_envelope"] = {"status": status, "errorCode": bad_doc.get("errorCode")}
 
         status, created = http_json(
             f"{API_BASE}/api/leads/sync",

@@ -123,6 +123,14 @@ def _lead_document_signed_url(storage_path: str) -> str:
         return signed
     return f"{api.SUPABASE_URL}/storage/v1{signed}"
 
+def _supabase_insert_error_event(payload: dict[str, Any]) -> None:
+    _supabase_rest(
+        "error_event",
+        method="POST",
+        body=payload,
+        extra_headers={"Prefer": "return=minimal"},
+    )
+
 def _load_supabase_lead_by_external_id(lead_external_id: str) -> dict[str, Any] | None:
     import api_support as api
     external_id = api._trim(lead_external_id)

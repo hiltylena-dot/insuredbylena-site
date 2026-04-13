@@ -9,6 +9,7 @@ import csv
 import re
 import mimetypes
 import base64
+import sys
 from datetime import datetime, timedelta, timezone
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -81,6 +82,7 @@ _BUFFER_CHANNEL_CACHE: dict[str, str] | None = None
 LEAD_DOCUMENT_BUCKET = os.getenv("LEAD_DOCUMENT_BUCKET", "lead-documents").strip() or "lead-documents"
 LEAD_DOCUMENT_MAX_BYTES = int(os.getenv("LEAD_DOCUMENT_MAX_BYTES", "10485760").strip() or "10485760")
 _LEAD_DOCUMENT_BUCKET_READY = False
+_ERROR_EVENT_TABLE_AVAILABLE: bool | None = None
 
 def _content_store_mode() -> str:
     if SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY:
@@ -130,6 +132,93 @@ def now_iso() -> str:
 
 def _trim(value) -> str:
     return str(value or "").strip()
+
+def _safe_json_value(value: Any, *, max_string_length: int = 4000, depth: int = 0) -> Any:
+    if depth >= 4:
+        return str(value)
+    if value is None or isinstance(value, (bool, int, float)):
+        return value
+    if isinstance(value, str):
+        return value[:max_string_length]
+    if isinstance(value, dict):
+        cleaned: dict[str, Any] = {}
+        for key, item in list(value.items())[:50]:
+            cleaned[str(key)[:120]] = _safe_json_value(item, max_string_length=max_string_length, depth=depth + 1)
+        return cleaned
+    if isinstance(value, (list, tuple, set)):
+        return [
+            _safe_json_value(item, max_string_length=max_string_length, depth=depth + 1)
+            for item in list(value)[:50]
+        ]
+    return str(value)[:max_string_length]
+
+def emit_backend_log(level: str, message: str, **fields: Any) -> None:
+    payload = {
+        "ts": now_iso(),
+        "level": _trim(level).lower() or "info",
+        "message": _trim(message) or "backend_event",
+    }
+    for key, value in fields.items():
+        if value is None:
+            continue
+        payload[str(key)] = _safe_json_value(value)
+    print(json.dumps(payload, default=str), file=sys.stderr, flush=True)
+
+def record_error_event(
+    *,
+    request_id: str,
+    method: str,
+    route: str,
+    status: int,
+    error_code: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    global _ERROR_EVENT_TABLE_AVAILABLE
+
+    payload = {
+        "service_name": "insuredbylena-portal-api",
+        "request_id": _trim(request_id),
+        "method": _trim(method),
+        "route": _trim(route),
+        "status": int(status or 500),
+        "error_code": _trim(error_code) or "internal_error",
+        "message": _trim(message) or "unknown_error",
+        "details_json": _safe_json_value(details or {}),
+    }
+    emit_backend_log(
+        "error",
+        "backend_request_failed",
+        error_message=payload["message"],
+        **{key: value for key, value in payload.items() if key != "message"},
+    )
+
+    if not (SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY):
+        return
+    if _ERROR_EVENT_TABLE_AVAILABLE is False:
+        return
+    try:
+        _supabase_insert_error_event(payload)
+        _ERROR_EVENT_TABLE_AVAILABLE = True
+    except Exception as exc:
+        message_text = str(exc)
+        if "error_event" in message_text and ("404" in message_text or "42P01" in message_text):
+            _ERROR_EVENT_TABLE_AVAILABLE = False
+            emit_backend_log(
+                "warning",
+                "error_event table is not configured; backend error persisted only to stderr",
+                request_id=request_id,
+                route=route,
+                detail=message_text,
+            )
+            return
+        emit_backend_log(
+            "warning",
+            "failed to persist error_event record",
+            request_id=request_id,
+            route=route,
+            detail=message_text,
+        )
 
 def mirror_db_to_drive() -> None:
     if not DRIVE_DB_DIR.exists():
