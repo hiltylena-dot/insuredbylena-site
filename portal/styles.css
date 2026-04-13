@@ -2312,39 +2312,6 @@ th.sortable[data-sort-dir="desc"]::after {
   }
 }
 
-/* Final hard overrides for broken header/grid rendering */
-.top-nav {
-  width: 100% !important;
-  position: sticky !important;
-  top: 0 !important;
-  z-index: 100 !important;
-}
-
-.top-nav .tab-strip {
-  position: static !important;
-  top: auto !important;
-  z-index: auto !important;
-  display: flex !important;
-  flex-wrap: nowrap !important;
-  overflow-x: auto !important;
-  white-space: nowrap !important;
-  width: 100% !important;
-}
-
-.top-nav .tab-button {
-  color: #dbe9fb !important;
-}
-
-.top-nav .tab-button.active {
-  color: #ffffff !important;
-}
-
-@media (max-width: 1300px) {
-  .top-nav-right {
-    display: none !important;
-  }
-}
-
 /* Landing-page alignment and denser operational layout */
 :root {
   --bg-accent:
@@ -5559,6 +5526,10 @@ body.dense #callDeskTabPanel .panel-header .panel-label {
   position: sticky !important;
   top: 0 !important;
   z-index: 100 !important;
+  background: rgba(255, 255, 255, 0.84) !important;
+  border-bottom: 1px solid rgba(26, 42, 58, 0.1) !important;
+  box-shadow: 0 10px 24px rgba(26, 42, 58, 0.08) !important;
+  backdrop-filter: blur(12px) !important;
 }
 
 .top-nav .tab-strip {
@@ -5570,14 +5541,49 @@ body.dense #callDeskTabPanel .panel-header .panel-label {
   overflow-x: auto !important;
   white-space: nowrap !important;
   width: 100% !important;
+  background: rgba(255, 255, 255, 0.7) !important;
+  border: 1px solid rgba(26, 42, 58, 0.08) !important;
+  box-shadow: 0 12px 28px rgba(26, 42, 58, 0.08) !important;
 }
 
 .top-nav .tab-button {
-  color: #dbe9fb !important;
+  color: #1a2a3a !important;
+  background: transparent !important;
+}
+
+.top-nav .tab-button:not(.active) {
+  color: #1a2a3a !important;
+  background: transparent !important;
+  border-color: rgba(26, 42, 58, 0.12) !important;
+}
+
+.top-nav .tab-button:hover,
+.top-nav .tab-button:focus-visible {
+  color: #9b5416 !important;
+  background: rgba(230, 126, 34, 0.12) !important;
 }
 
 .top-nav .tab-button.active {
   color: #ffffff !important;
+  background: linear-gradient(135deg, #e67e22, #f59e0b) !important;
+  border-color: transparent !important;
+  box-shadow: 0 12px 26px rgba(230, 126, 34, 0.24) !important;
+}
+
+.top-brand,
+.top-nav-right,
+.top-nav-right *,
+#datasetStatus {
+  color: #1a2a3a !important;
+}
+
+.status-pill,
+#datasetStatus,
+.top-status-pills .status-pill {
+  color: #9b5416 !important;
+  background: rgba(230, 126, 34, 0.12) !important;
+  border-color: rgba(230, 126, 34, 0.2) !important;
+  box-shadow: none !important;
 }
 
 @media (max-width: 1300px) {
