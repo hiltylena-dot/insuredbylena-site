@@ -89,6 +89,14 @@ def http_json_with_headers(
         return exc.code, payload_obj, dict(exc.headers.items())
 
 
+def get_header(headers: dict[str, str], name: str) -> str:
+    target = name.lower()
+    for key, value in headers.items():
+        if str(key).lower() == target:
+            return str(value)
+    return ""
+
+
 def supabase_rest(
     path: str,
     *,
@@ -138,7 +146,7 @@ def main() -> int:
     try:
         status, health, health_headers = http_json_with_headers(f"{API_BASE}/api/health")
         assert_true(status == 200 and _json_ok(health), f"API health failed: {health}")
-        assert_true(bool(health_headers.get("X-Request-Id")), f"Health response missing X-Request-Id header: {health_headers}")
+        assert_true(bool(get_header(health_headers, "X-Request-Id")), f"Health response missing X-Request-Id header: {health_headers}")
         assert_true(bool((health or {}).get("requestId")), f"Health response missing requestId body field: {health}")
         results["health"] = {"status": status, "requestId": (health or {}).get("requestId")}
 
