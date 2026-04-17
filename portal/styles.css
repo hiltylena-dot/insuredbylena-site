@@ -4813,17 +4813,27 @@ body.dense textarea {
   gap: 4px;
 }
 
-#contentStudioTabPanel input[type="text"],
-#contentStudioTabPanel input[type="date"],
-#contentStudioTabPanel input[type="time"],
-#contentStudioTabPanel input[type="datetime-local"],
+#contentStudioTabPanel input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 #contentStudioTabPanel select,
 #contentStudioTabPanel textarea {
   background: rgba(7, 17, 27, 0.96) !important;
   color: #eef4fb !important;
+  -webkit-text-fill-color: #eef4fb !important;
+  caret-color: #eef4fb !important;
   border: 1px solid rgba(117, 155, 194, 0.24) !important;
   border-radius: 10px !important;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+#contentStudioTabPanel input:not([type="checkbox"]):not([type="radio"]):not([type="file"])::placeholder,
+#contentStudioTabPanel textarea::placeholder {
+  color: rgba(183, 198, 216, 0.86) !important;
+  -webkit-text-fill-color: rgba(183, 198, 216, 0.86) !important;
+}
+
+#contentStudioTabPanel select option {
+  background: #0f1b28;
+  color: #eef4fb;
 }
 
 #contentStudioTabPanel textarea {

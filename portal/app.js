@@ -134,15 +134,15 @@ function hasPortalContentAccess() {
 }
 
 function canEditContent() {
-  return ["admin", "editor", "approver"].includes(normalizePortalRole(state.auth?.role));
+  return hasPortalContentAccess();
 }
 
 function canApproveContent() {
-  return ["admin", "approver"].includes(normalizePortalRole(state.auth?.role));
+  return hasPortalContentAccess();
 }
 
 function canPublishContent() {
-  return ["admin"].includes(normalizePortalRole(state.auth?.role));
+  return false;
 }
 
 function getContentDraftOverride(postId) {
@@ -379,7 +379,7 @@ function applyContentStudioRolePermissions() {
         "contentStepPublishBtn",
       ],
       allowed: canPublishContent(),
-      reason: loggedIn ? "Publishing requires an admin role and a configured remote publisher." : "Sign into the portal to use Content Studio.",
+      reason: loggedIn ? "Run Publish is not live in the remote portal yet. Approve and schedule here first." : "Sign into the portal to use Content Studio.",
     },
   ];
 
@@ -8142,24 +8142,12 @@ function getContentApprovalValidationIssues() {
   const hook = String(document.getElementById("contentEditHook")?.value || "").trim();
   const caption = String(document.getElementById("contentEditCaption")?.value || "").trim();
   const cta = String(document.getElementById("contentEditCta")?.value || "").trim();
-  const combined = `${hook}\n${caption}\n${cta}`;
+  const assetUrl = String(document.getElementById("contentEditAssetFile")?.value || "").trim();
   const issues = [];
-  if (!/insuredbylena\.com/i.test(combined)) {
-    issues.push("Include insuredbylena.com in the caption or CTA.");
-  }
-  if (!/comment\s+\"?guide\"?/i.test(combined) && !/\bguide\b/i.test(cta)) {
-    issues.push('Add a comment prompt: Comment "GUIDE" for DM checklist.');
-  }
-  const hasSavingsClaim =
-    /\$[\d,]+/i.test(combined) ||
-    /%\s*off/i.test(combined) ||
-    /\blower premium\b/i.test(combined) ||
-    /\brate change\b/i.test(combined) ||
-    /\bsaved?\s+\$[\d,]+/i.test(combined) ||
-    /\bqualify for lower/i.test(combined);
-  const hasDisclaimer = /\b(results vary|not guaranteed|depends on eligibility|based on underwriting)\b/i.test(combined);
-  if (hasSavingsClaim && !hasDisclaimer) {
-    issues.push("Savings or rate claims need a disclaimer (e.g., results vary based on eligibility/underwriting).");
+  if (!hook) issues.push("Add a hook before approving.");
+  if (!caption) issues.push("Add a caption before approving.");
+  if (!assetUrl || !/^https?:\/\//i.test(assetUrl) || /FILE_ID_/i.test(assetUrl)) {
+    issues.push("Paste a real public Final Asset URL before approving.");
   }
   return issues;
 }
@@ -8272,7 +8260,7 @@ function renderContentPublishGuide() {
       title: "Run Publish",
       done: flow.currentStatus === "published",
       active: flow.approved && flow.hasSchedule && flow.hasAsset,
-      note: flow.hasAsset ? "Sends approved posts with saved schedule times to Buffer." : "Blocked until the final Canva asset URL is real.",
+      note: "Not live in the remote portal yet. Approve and schedule here; publish will move to the server-side worker.",
     },
   ];
   summary.textContent = flow.issues.length
@@ -9175,15 +9163,27 @@ async function saveSelectedContentDraft() {
 async function runContentAction(action) {
   if (!isContentApiAvailable()) {
     setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
+    showPortalToast("Content Studio remote API is disabled in this portal build.", "error", {
+      title: "Content Action Failed",
+      duration: 5000,
+    });
     return;
   }
   if (action === "approve" || action === "schedule") {
     if (!canApproveContent()) {
       setContentStudioStatus("Your role cannot approve or schedule posts.");
+      showPortalToast("Approve and Schedule are available once you are signed into the portal.", "warning", {
+        title: "Action Blocked",
+        duration: 4500,
+      });
       return;
     }
   } else if (!canEditContent()) {
     setContentStudioStatus("Your role cannot update Content Studio posts.");
+    showPortalToast("Sign into the portal first to update Content Studio posts.", "warning", {
+      title: "Action Blocked",
+      duration: 4500,
+    });
     return;
   }
   const post = getSelectedContentPost();
@@ -9194,13 +9194,19 @@ async function runContentAction(action) {
   if (action === "approve" || action === "schedule") {
     if (hasPlaceholderAssetFile()) {
       setContentStudioStatus("Cannot run action: Update media link in media-links.csv first");
-      window.alert("This post is blocked.\n\nReason: the Final Asset URL still uses a placeholder FILE_ID value.\n\nFinish the visual in Canva and paste a real public asset URL first.");
+      showPortalToast("Finish the Canva export and paste a real public Final Asset URL first.", "warning", {
+        title: action === "approve" ? "Approve Blocked" : "Schedule Blocked",
+        duration: 5500,
+      });
       return;
     }
     const issues = getContentApprovalValidationIssues();
     if (issues.length) {
       setContentStudioStatus(`Cannot ${action}: ${issues.join(" ")}`);
-      window.alert(`Cannot ${action} this post yet.\n\n${issues.join("\n")}`);
+      showPortalToast(issues.join(" "), "warning", {
+        title: action === "approve" ? "Approve Blocked" : "Schedule Blocked",
+        duration: 6000,
+      });
       return;
     }
   }
@@ -9378,6 +9384,23 @@ async function restoreContentRevision(revisionId) {
 }
 
 async function runContentPublish() {
+  const publishBlockedMessage = "Run Publish is not live in the remote portal yet. Approve and schedule here, then use the server-side publisher when it is turned on.";
+  const publishButtonIds = ["contentRunPublishBtn", "contentRunPublishTopBtn", "contentStepPublishBtn"];
+  publishButtonIds.forEach((id) => {
+    const button = document.getElementById(id);
+    if (!(button instanceof HTMLButtonElement)) return;
+    button.disabled = true;
+    button.setAttribute("aria-disabled", "true");
+    button.setAttribute("data-role-disabled", "true");
+    button.title = publishBlockedMessage;
+    button.setAttribute("data-disabled-reason", publishBlockedMessage);
+  });
+  setContentStudioStatus(publishBlockedMessage);
+  showPortalToast(publishBlockedMessage, "info", {
+    title: "Publish Not Live Yet",
+    duration: 6000,
+  });
+  return;
   if (!isContentApiAvailable()) {
     setContentStudioStatus("Content Studio remote API is disabled in the hardened portal.");
     return;
