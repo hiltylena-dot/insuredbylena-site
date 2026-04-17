@@ -109,9 +109,8 @@ def _is_media_mime(mime_type: str) -> bool:
 
 def _load_asset_filename_hints() -> dict[str, str]:
     import api_support as api
-    global _ASSET_HINTS_CACHE
-    if _ASSET_HINTS_CACHE is not None:
-        return _ASSET_HINTS_CACHE
+    if api._ASSET_HINTS_CACHE is not None:
+        return api._ASSET_HINTS_CACHE
 
     hints: dict[str, str] = {}
     for file_path in sorted(api.CONTENT_FILES_ROOT.glob("WEEK*_SCHEDULER_EXPORT.json")):
@@ -137,7 +136,7 @@ def _load_asset_filename_hints() -> dict[str, str]:
             placeholder = f"FILE_ID_W{week_number}D{absolute_day}"
             if placeholder not in hints:
                 hints[placeholder] = asset_filename
-    _ASSET_HINTS_CACHE = hints
+    api._ASSET_HINTS_CACHE = hints
     return hints
 
 def _search_drive_for_media(query: str) -> dict[str, Any] | None:
@@ -200,8 +199,8 @@ def _auto_resolve_drive_media_url(file_id_placeholder: str, week_number: int, da
     key = api._trim(file_id_placeholder).upper()
     if not key or not _is_placeholder_file_id(key):
         return ""
-    if key in _DRIVE_MEDIA_CACHE:
-        return _DRIVE_MEDIA_CACHE[key]
+    if key in api._DRIVE_MEDIA_CACHE:
+        return api._DRIVE_MEDIA_CACHE[key]
 
     hints = _load_asset_filename_hints()
     absolute_day = ((int(week_number or 0) - 1) * 7) + int(day_in_week or 0)
@@ -235,7 +234,7 @@ def _auto_resolve_drive_media_url(file_id_placeholder: str, week_number: int, da
             continue
         _ensure_drive_public_read(found_id)
         resolved = f"https://drive.google.com/uc?export=download&id={found_id}"
-        _DRIVE_MEDIA_CACHE[key] = resolved
+        api._DRIVE_MEDIA_CACHE[key] = resolved
         return resolved
     return ""
 
@@ -522,12 +521,11 @@ def buffer_fetch_channels(organization_id: str) -> list[dict]:
 
 def _buffer_autodiscovered_channel_map() -> dict[str, str]:
     import api_support as api
-    global _BUFFER_CHANNEL_CACHE
-    if _BUFFER_CHANNEL_CACHE is not None:
-        return _BUFFER_CHANNEL_CACHE
+    if api._BUFFER_CHANNEL_CACHE is not None:
+        return api._BUFFER_CHANNEL_CACHE
     explicit = _buffer_channel_env_map()
     if all(explicit.values()) or not (api.BUFFER_API_KEY and api.BUFFER_ORGANIZATION_ID):
-        _BUFFER_CHANNEL_CACHE = explicit
+        api._BUFFER_CHANNEL_CACHE = explicit
         return explicit
 
     discovered = dict(explicit)
@@ -539,7 +537,7 @@ def _buffer_autodiscovered_channel_map() -> dict[str, str]:
             continue
         if service in discovered and not discovered[service]:
             discovered[service] = channel_id
-    _BUFFER_CHANNEL_CACHE = discovered
+    api._BUFFER_CHANNEL_CACHE = discovered
     return discovered
 
 def buffer_channel_id_for_platform(platform: str) -> str:

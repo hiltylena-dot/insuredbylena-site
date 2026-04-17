@@ -8199,25 +8199,27 @@ function getContentPublishFlowState() {
   const hasSchedule = Boolean(scheduledValue);
   const scheduled = currentStatus === "scheduled" || currentStatus === "published" || hasSchedule;
   const hasAsset = Boolean(assetValue) && /^https?:\/\//i.test(assetValue) && !/FILE_ID_/i.test(assetValue);
-  const dueNow = scheduledValue ? (() => {
+  const scheduleIsFuture = scheduledValue ? (() => {
     try {
       const candidate = new Date(scheduledValue);
-      return !Number.isNaN(candidate.getTime()) && candidate.getTime() <= Date.now();
+      return !Number.isNaN(candidate.getTime()) && candidate.getTime() > Date.now();
     } catch {
       return false;
     }
-  })() : currentStatus === "approved";
+  })() : false;
   const issues = [];
   if (!hasAsset) {
     issues.push(assetValue ? `Final asset URL is invalid: ${assetValue}` : "Paste the final public Canva export URL in Final Asset URL.");
   }
   if (!approved) issues.push("Click Approve first.");
   if (!hasSchedule) issues.push("Set Schedule At before sending this post to Buffer.");
+  else if (!scheduleIsFuture) issues.push("Reschedule this post to a future date/time before publishing.");
   let nextStep = "Run Publish";
   if (!approved) nextStep = "Approve";
   else if (!hasSchedule) nextStep = "Set Schedule At";
+  else if (!scheduleIsFuture) nextStep = "Reschedule";
   else if (!hasAsset) nextStep = "Paste final Canva asset URL";
-  return { post, currentStatus, saved, approved, scheduled, hasSchedule, dueNow, hasAsset, issues, nextStep };
+  return { post, currentStatus, saved, approved, scheduled, hasSchedule, scheduleIsFuture, hasAsset, issues, nextStep };
 }
 
 function renderContentPublishGuide() {
@@ -8252,17 +8254,17 @@ function renderContentPublishGuide() {
       done: flow.hasSchedule,
       active: flow.approved && !flow.hasSchedule,
       note: flow.hasSchedule
-        ? "Schedule time saved. Buffer will use this time when you run publish."
+        ? (flow.scheduleIsFuture ? "Schedule time is in the future and publish-ready." : "Current schedule is in the past. Reschedule it before publishing.")
         : "Set Schedule At so Buffer knows when this post should publish.",
     },
     {
       label: "Step 4",
       title: "Run Publish",
       done: flow.currentStatus === "published",
-      active: flow.approved && flow.hasSchedule && flow.hasAsset,
-      note: flow.dueNow
-        ? "This post is due now. Run Publish sends it through the live server-side Buffer publisher."
-        : "Run Publish only sends posts whose schedule time is already due.",
+      active: flow.approved && flow.hasSchedule && flow.scheduleIsFuture && flow.hasAsset,
+      note: flow.scheduleIsFuture
+        ? "Run Publish sends this future-dated post through the live server-side Buffer publisher."
+        : "Run Publish is blocked until the schedule time is moved into the future.",
     },
   ];
   summary.textContent = flow.issues.length
@@ -8316,8 +8318,10 @@ function renderContentRequiredChecklist() {
     },
     {
       label: "Scheduled to publish",
-      done: flow.hasSchedule,
-      note: flow.hasSchedule ? "Schedule time is saved and ready to send to Buffer." : (scheduleValue ? "Save or approve the post to keep this schedule time." : "Set Schedule At before sending this post to Buffer."),
+      done: flow.hasSchedule && flow.scheduleIsFuture,
+      note: !flow.hasSchedule
+        ? (scheduleValue ? "Save or approve the post to keep this schedule time." : "Set Schedule At before sending this post to Buffer.")
+        : (flow.scheduleIsFuture ? "Schedule time is future-dated and ready to send to Buffer." : "Current schedule is in the past. Reschedule before publishing."),
     },
   ];
   const remaining = items.filter((item) => !item.done).length;

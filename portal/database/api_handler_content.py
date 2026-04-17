@@ -670,13 +670,13 @@ class ContentHandlerMixin:
                         )
                         continue
                     scheduled_dt = api._parse_iso_like(str(item.get("scheduled_for") or ""))
-                    if scheduled_dt > now_dt:
+                    if scheduled_dt <= now_dt:
                         results.append(
                             {
                                 "id": item["id"],
                                 "post_id": item["post_id"],
-                                "status": "skipped_not_due",
-                                "reason": "scheduled_for_in_future",
+                                "status": "skipped_overdue",
+                                "reason": "reschedule_future_time_required",
                             }
                         )
                         continue
@@ -809,13 +809,13 @@ class ContentHandlerMixin:
                         )
                         continue
                     scheduled_dt = api._parse_iso_like(str(item.get("scheduled_for") or ""))
-                    if scheduled_dt > now_dt:
+                    if scheduled_dt <= now_dt:
                         results.append(
                             {
                                 "id": item["id"],
                                 "post_id": item["post_id"],
-                                "status": "skipped_not_due",
-                                "reason": "scheduled_for_in_future",
+                                "status": "skipped_overdue",
+                                "reason": "reschedule_future_time_required",
                             }
                         )
                         continue
