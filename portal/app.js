@@ -142,7 +142,7 @@ function canApproveContent() {
 }
 
 function canPublishContent() {
-  return false;
+  return Boolean(API_ORIGIN && hasPortalContentAccess());
 }
 
 function getContentDraftOverride(postId) {
@@ -379,7 +379,7 @@ function applyContentStudioRolePermissions() {
         "contentStepPublishBtn",
       ],
       allowed: canPublishContent(),
-      reason: loggedIn ? "Run Publish is not live in the remote portal yet. Approve and schedule here first." : "Sign into the portal to use Content Studio.",
+      reason: loggedIn ? "Publishing requires the live portal API connection." : "Sign into the portal to use Content Studio.",
     },
   ];
 
@@ -8260,7 +8260,9 @@ function renderContentPublishGuide() {
       title: "Run Publish",
       done: flow.currentStatus === "published",
       active: flow.approved && flow.hasSchedule && flow.hasAsset,
-      note: "Not live in the remote portal yet. Approve and schedule here; publish will move to the server-side worker.",
+      note: flow.dueNow
+        ? "This post is due now. Run Publish sends it through the live server-side Buffer publisher."
+        : "Run Publish only sends posts whose schedule time is already due.",
     },
   ];
   summary.textContent = flow.issues.length
@@ -9384,22 +9386,62 @@ async function restoreContentRevision(revisionId) {
 }
 
 async function runContentPublish() {
-  const publishBlockedMessage = "Run Publish is not live in the remote portal yet. Approve and schedule here, then use the server-side publisher when it is turned on.";
-  const publishButtonIds = ["contentRunPublishBtn", "contentRunPublishTopBtn", "contentStepPublishBtn"];
-  publishButtonIds.forEach((id) => {
-    const button = document.getElementById(id);
-    if (!(button instanceof HTMLButtonElement)) return;
-    button.disabled = true;
-    button.setAttribute("aria-disabled", "true");
-    button.setAttribute("data-role-disabled", "true");
-    button.title = publishBlockedMessage;
-    button.setAttribute("data-disabled-reason", publishBlockedMessage);
-  });
-  setContentStudioStatus(publishBlockedMessage);
-  showPortalToast(publishBlockedMessage, "info", {
-    title: "Publish Not Live Yet",
-    duration: 6000,
-  });
+  if (!canPublishContent() || !LOCAL_DB_CONTENT_PUBLISH_RUN_URL) {
+    const message = hasPortalContentAccess()
+      ? "The live publish API is not configured."
+      : "Sign into the portal to use Content Studio.";
+    setContentStudioStatus(message);
+    showPortalToast(message, "warning", {
+      title: "Publish Unavailable",
+      duration: 5000,
+    });
+    return;
+  }
+  const selectedIds = (state.ui.contentSelectedPostIds || [])
+    .map((value) => Number(value))
+    .filter((value) => Number.isFinite(value) && value > 0);
+  const selectedPost = getSelectedContentPost();
+  const payload = selectedIds.length
+    ? { postIds: selectedIds }
+    : selectedPost?.id
+      ? { selectedPostId: Number(selectedPost.id) }
+      : { limit: 20 };
+  const scopeLabel = selectedIds.length
+    ? `${selectedIds.length} selected post${selectedIds.length === 1 ? "" : "s"}`
+    : selectedPost?.post_id
+      ? selectedPost.post_id
+      : "due approved/scheduled posts";
+  setContentStudioStatus(`Running publish for ${scopeLabel}...`);
+  try {
+    const response = await fetch(LOCAL_DB_CONTENT_PUBLISH_RUN_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok || !data?.ok) {
+      throw new Error(String(data?.error || `Publish failed (${response.status})`));
+    }
+    await loadContentStudioData("Publish run complete.");
+    const results = Array.isArray(data?.results) ? data.results : [];
+    const published = results.filter((item) => String(item?.status || "").toLowerCase() === "published").length;
+    const failed = results.filter((item) => String(item?.status || "").toLowerCase() === "failed").length;
+    const skipped = results.length - published - failed;
+    const message = `Publish complete. Published: ${published}. Failed: ${failed}. Skipped: ${skipped}.`;
+    setContentStudioStatus(message);
+    showPortalToast(message, failed ? "warning" : "success", {
+      title: "Buffer Publish",
+      duration: failed ? 6000 : 4000,
+    });
+  } catch (error) {
+    const message = String(error?.message || error || "Publish failed.");
+    setContentStudioStatus(message);
+    showPortalToast(message, "error", {
+      title: "Publish Failed",
+      duration: 7000,
+    });
+    throw error;
+  }
 }
 
 async function importContentFromJsonFile(file) {

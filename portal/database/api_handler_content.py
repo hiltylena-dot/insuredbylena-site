@@ -669,6 +669,17 @@ class ContentHandlerMixin:
                             }
                         )
                         continue
+                    scheduled_dt = api._parse_iso_like(str(item.get("scheduled_for") or ""))
+                    if scheduled_dt > now_dt:
+                        results.append(
+                            {
+                                "id": item["id"],
+                                "post_id": item["post_id"],
+                                "status": "skipped_not_due",
+                                "reason": "scheduled_for_in_future",
+                            }
+                        )
+                        continue
                     duplicate_reason = ""
                     if api._trim(item["scheduler_external_id"]) and str(item.get("status")).lower() == "published":
                         duplicate_reason = "this row already has a scheduler external id"
@@ -794,6 +805,17 @@ class ContentHandlerMixin:
                                 "post_id": item["post_id"],
                                 "status": "skipped_missing_schedule",
                                 "reason": "scheduled_for_required",
+                            }
+                        )
+                        continue
+                    scheduled_dt = api._parse_iso_like(str(item.get("scheduled_for") or ""))
+                    if scheduled_dt > now_dt:
+                        results.append(
+                            {
+                                "id": item["id"],
+                                "post_id": item["post_id"],
+                                "status": "skipped_not_due",
+                                "reason": "scheduled_for_in_future",
                             }
                         )
                         continue
