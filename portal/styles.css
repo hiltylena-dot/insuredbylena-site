@@ -5616,14 +5616,15 @@ body.dense #callDeskTabPanel .panel-header .panel-label {
 }
 
 .top-nav .tab-button:not(.active) {
-  color: #292521 !important;
+  color: #4c4239 !important;
   background: transparent !important;
-  border-color: rgba(41, 37, 33, 0.12) !important;
+  border-color: rgba(41, 37, 33, 0.16) !important;
+  font-weight: 600 !important;
 }
 
 .top-nav .tab-button:hover,
 .top-nav .tab-button:focus-visible {
-  color: #5f554c !important;
+  color: #3d352f !important;
   background: rgba(143, 132, 119, 0.12) !important;
 }
 
@@ -5644,10 +5645,45 @@ body.dense #callDeskTabPanel .panel-header .panel-label {
 .status-pill,
 #datasetStatus,
 .top-status-pills .status-pill {
-  color: #5f554c !important;
+  color: #4f463e !important;
   background: rgba(143, 132, 119, 0.12) !important;
   border-color: rgba(143, 132, 119, 0.22) !important;
   box-shadow: none !important;
+}
+
+.portal-user-email {
+  color: #433a33 !important;
+}
+
+.portal-user-role {
+  color: #4a4037 !important;
+  border-color: rgba(143, 132, 119, 0.26) !important;
+  background: rgba(143, 132, 119, 0.14) !important;
+}
+
+.muted,
+.table-summary,
+.toolbar-note,
+.filters label,
+.detail-label,
+.detail-panel label,
+.notes-form label,
+.workflow-form label,
+.guide-copy,
+.content-field-help,
+.content-design-note,
+#contentStudioTabPanel .content-field-help,
+#contentStudioTabPanel .content-design-note,
+#contentStudioTabPanel .table-summary,
+#contentStudioTabPanel .panel-label,
+#contentStudioStatus {
+  color: #6b625a !important;
+}
+
+#contentStudioTabPanel input:not([type="checkbox"]):not([type="radio"]):not([type="file"])::placeholder,
+#contentStudioTabPanel textarea::placeholder {
+  color: rgba(201, 214, 229, 0.9) !important;
+  -webkit-text-fill-color: rgba(201, 214, 229, 0.9) !important;
 }
 
 html,
