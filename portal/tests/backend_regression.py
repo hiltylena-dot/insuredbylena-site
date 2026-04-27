@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import os
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib import error as urlerror, request as urlrequest
 from urllib.parse import quote
@@ -120,6 +121,17 @@ def assert_true(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def future_utc_iso(days_ahead: int, hour: int, minute: int) -> str:
+    target = datetime.now(timezone.utc) + timedelta(days=days_ahead)
+    target = target.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return target.isoformat().replace("+00:00", "Z")
+
+
+def future_date(days_ahead: int) -> str:
+    target = datetime.now(timezone.utc) + timedelta(days=days_ahead)
+    return target.strftime("%Y-%m-%d")
+
+
 def _json_ok(response: object) -> bool:
     return isinstance(response, dict) and bool(response.get("ok"))
 
@@ -138,6 +150,11 @@ def main() -> int:
     imported_contact = f"IMPORT-{stamp}"
     imported_email = f"import-{stamp}@example.com"
     content_post_key = f"API-{stamp}"
+    schedule_create = future_utc_iso(1, 15, 0)
+    schedule_update = future_utc_iso(2, 16, 0)
+    content_post_date = future_date(3)
+    approve_time = future_utc_iso(3, 14, 0)
+    schedule_time = future_utc_iso(3, 15, 0)
 
     lead_id = 0
     lead_external_id = contact
@@ -176,7 +193,7 @@ def main() -> int:
                 "email": email,
                 "disposition": "callback",
                 "shouldSchedule": True,
-                "nextAppointmentTime": "2026-04-18T15:00:00Z",
+                "nextAppointmentTime": schedule_create,
                 "notes": "regression create",
             },
         )
@@ -195,7 +212,7 @@ def main() -> int:
                 "confidence": "high",
                 "disposition": "follow_up",
                 "shouldSchedule": True,
-                "nextAppointmentTime": "2026-04-19T16:00:00Z",
+                "nextAppointmentTime": schedule_update,
             },
         )
         assert_true(status == 200 and _json_ok(updated), f"Lead sync update failed: {updated}")
@@ -250,7 +267,7 @@ def main() -> int:
                         "post_id": content_post_key,
                         "week_number": 1,
                         "day": 1,
-                        "post_date": "2026-04-20",
+                        "post_date": content_post_date,
                         "post_time": "09:30",
                         "platforms": ["facebook"],
                         "post_type": "social",
@@ -298,14 +315,14 @@ def main() -> int:
         status, approve = http_json(
             f"{API_BASE}/api/content/posts/{content_post_id}/approve",
             method="POST",
-            body={"actor": "backend-regression", "note": "approve", "scheduledFor": "2026-04-20T14:00:00"},
+            body={"actor": "backend-regression", "note": "approve", "scheduledFor": approve_time},
         )
         assert_true(status == 200 and _json_ok(approve), f"Approve failed: {approve}")
 
         status, schedule = http_json(
             f"{API_BASE}/api/content/posts/{content_post_id}/schedule",
             method="POST",
-            body={"actor": "backend-regression", "note": "schedule", "scheduledFor": "2026-04-20T15:00:00"},
+            body={"actor": "backend-regression", "note": "schedule", "scheduledFor": schedule_time},
         )
         assert_true(status == 200 and _json_ok(schedule), f"Schedule failed: {schedule}")
 

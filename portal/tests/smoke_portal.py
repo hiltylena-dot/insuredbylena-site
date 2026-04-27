@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import time
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib import error as urlerror, request as urlrequest
 from urllib.parse import quote
@@ -73,12 +74,20 @@ def assert_true(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
+def future_utc_iso(days_ahead: int, hour: int, minute: int) -> str:
+    target = datetime.now(timezone.utc) + timedelta(days=days_ahead)
+    target = target.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    return target.isoformat().replace("+00:00", "Z")
+
+
 def main() -> int:
     stamp = str(int(time.time()))
     phone = f"555{stamp[-7:]}"
     email = f"codex-smoke-{stamp}@example.com"
     contact_one = f"SMOKE-{stamp}-A"
     contact_two = f"SMOKE-{stamp}-B"
+    schedule_one = future_utc_iso(1, 15, 0)
+    schedule_two = future_utc_iso(2, 16, 0)
     lead_id = None
     lead_external_id = contact_one
     appointment_id = None
@@ -101,14 +110,14 @@ def main() -> int:
             "email": email,
             "disposition": "callback",
             "shouldSchedule": True,
-            "nextAppointmentTime": "2026-04-16T15:00:00Z",
+            "nextAppointmentTime": schedule_one,
             "notes": "Initial smoke save",
         }
         status, rpc_one = supabase_rest("rpc/portal_save_call_desk", method="POST", body={"p_payload": save_payload})
         assert_true(status in (200, 201) and isinstance(rpc_one, dict) and rpc_one.get("ok"), f"RPC save 1 failed: {rpc_one}")
 
         save_payload["contactId"] = contact_two
-        save_payload["nextAppointmentTime"] = "2026-04-17T16:00:00Z"
+        save_payload["nextAppointmentTime"] = schedule_two
         save_payload["notes"] = "Second smoke save"
         status, rpc_two = supabase_rest("rpc/portal_save_call_desk", method="POST", body={"p_payload": save_payload})
         assert_true(status in (200, 201) and isinstance(rpc_two, dict) and rpc_two.get("ok"), f"RPC save 2 failed: {rpc_two}")

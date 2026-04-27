@@ -23,6 +23,34 @@ function nowStamp() {
   return String(Date.now());
 }
 
+function futureUtcIso(daysAhead, hour = 15, minute = 0) {
+  const date = new Date();
+  date.setUTCDate(date.getUTCDate() + daysAhead);
+  date.setUTCHours(hour, minute, 0, 0);
+  return date.toISOString();
+}
+
+function futureLocalDate(daysAhead) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function futureLocalDateTime(daysAhead, hour = 10, minute = 0) {
+  const date = new Date();
+  date.setDate(date.getDate() + daysAhead);
+  date.setHours(hour, minute, 0, 0);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hours = String(date.getHours()).padStart(2, "0");
+  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hours}:${minutes}`;
+}
+
 async function ensureArtifactsDir() {
   await fs.mkdir(ARTIFACT_DIR, { recursive: true });
 }
@@ -115,7 +143,7 @@ async function deleteAdminProfile(userId) {
   await supabaseRest(`app_user_profile?user_id=eq.${quote(userId)}`, { method: "DELETE" }).catch(() => {});
 }
 
-async function createLead(contactId, phone, email) {
+async function createLead(contactId, phone, email, nextAppointmentTime) {
   const { status, data } = await supabaseRest("rpc/portal_save_call_desk", {
     method: "POST",
     body: {
@@ -128,7 +156,7 @@ async function createLead(contactId, phone, email) {
         email,
         disposition: "callback",
         shouldSchedule: true,
-        nextAppointmentTime: "2026-04-20T15:00:00Z",
+        nextAppointmentTime,
         notes: "Frontend smoke seed",
         nextStep: "Frontend smoke next step",
       },
@@ -138,7 +166,7 @@ async function createLead(contactId, phone, email) {
   return data?.lead || {};
 }
 
-async function createContentPost(postKey) {
+async function createContentPost(postKey, postDate) {
   const { status, data } = await supabaseRest("content_post?select=id,post_id,status", {
     method: "POST",
     headers: { Prefer: "return=representation" },
@@ -146,7 +174,7 @@ async function createContentPost(postKey) {
       post_id: postKey,
       week_number: 1,
       day: 1,
-      post_date: "2026-04-20",
+      post_date: postDate,
       post_time: "09:00",
       scheduled_for: null,
       platforms_json: ["facebook"],
@@ -222,6 +250,10 @@ async function main() {
   const contactId = `FRONTEND-${stamp}`;
   const smokePhone = `557${stamp.slice(-7)}`;
   const contentPostKey = `FRONTEND-${stamp}`;
+  const seededLeadTime = futureUtcIso(1, 15, 0);
+  const deskFollowUpTime = futureLocalDateTime(2, 10, 30);
+  const contentPostDate = futureLocalDate(2);
+  const contentScheduleTime = futureLocalDateTime(2, 11, 15);
 
   let authUserId = "";
   let leadId = 0;
@@ -235,11 +267,11 @@ async function main() {
     authUserId = user.id;
     await createAdminProfile(authUserId, smokeEmail);
 
-    const seededLead = await createLead(contactId, smokePhone, smokeEmail);
+    const seededLead = await createLead(contactId, smokePhone, smokeEmail, seededLeadTime);
     leadId = Number(seededLead.lead_id || 0);
     leadExternalId = String(seededLead.lead_external_id || contactId);
 
-    const seededPost = await createContentPost(contentPostKey);
+    const seededPost = await createContentPost(contentPostKey, contentPostDate);
     contentPostId = Number(seededPost.id || 0);
 
     browser = await chromium.launch({ headless: true });
@@ -277,7 +309,7 @@ async function main() {
     await page.selectOption("#deskDisposition", "follow_up");
     await page.fill("#deskNextStep", "CI smoke follow-up");
     await page.fill("#deskCallNotes", "Frontend smoke save from Playwright.");
-    await page.fill("#deskFollowUp", "2026-04-21T10:30");
+    await page.fill("#deskFollowUp", deskFollowUpTime);
     await page.click("#deskSaveToNotesBtn");
     await page.waitForFunction(() => {
       const btn = document.getElementById("deskSaveToNotesBtn");
@@ -339,7 +371,7 @@ async function main() {
 
     await page.fill("#contentEditTopic", "Frontend smoke topic updated");
     await page.fill("#contentEditCaption", "Frontend smoke caption updated https://insuredbylena.com GUIDE");
-    await page.fill("#contentEditScheduledFor", "2026-04-21T11:15");
+    await page.fill("#contentEditScheduledFor", contentScheduleTime);
     await page.locator("#contentEditScheduledFor").press("Tab");
 
     await page.click("#contentSaveBtn");
